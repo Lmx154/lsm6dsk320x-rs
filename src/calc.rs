@@ -45,8 +45,10 @@ pub const fn scale_rate_mhz(nominal_mhz: u32, freq_fine: i8) -> u32 {
 /// The real output data rate in millihertz for a nominal ODR and the INTERNAL_FREQ_FINE value:
 /// `ODR_actual = 7680 Hz * (1 + 0.0013 * FREQ_FINE) / ODRcoeff` (9.54, p92). 0 for power-down.
 ///
-/// The formula is the datasheet's for the standard rates. For the high-accuracy ODR mode it gives
-/// no figure; use [`scale_rate_mhz`] with [`Odr::haodr_mhz`] at your own risk.
+/// The formula is the datasheet's for the standard rates. In the high-accuracy ODR mode the trim
+/// does not apply: measured on the MARV V2 board, 2026-11-11, the rates followed the table values
+/// of [`Odr::haodr_mhz`] to within 0.3 %, not the trim; [`Info`](crate::Info) reports the table
+/// value there.
 pub const fn real_odr_mhz(odr: Odr, freq_fine: i8) -> u32 {
     match odr_coeff(odr) {
         // The coefficients are powers of two up to 1024 and divide 7_680_000 mHz exactly.

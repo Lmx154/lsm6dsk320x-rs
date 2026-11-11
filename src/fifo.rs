@@ -251,7 +251,9 @@ pub const fn timestamp_delta_ticks(earlier: u32, later: u32) -> u32 {
 
 /// The expected FIFO word rate for `config`, in millihertz (words per second times 1000), rounded
 /// up. `freq_fine` is the INTERNAL_FREQ_FINE value (9.54, p92) that scales all rates; use 0 for
-/// the nominal rates. The configuration is not validated.
+/// the nominal rates. In the high-accuracy ODR mode the trim is not applied (the datasheet gives
+/// the rate there as the table rate, +-1 % with the gyroscope on, 6.1.4 and Table 3, p13, p34).
+/// The configuration is not validated.
 ///
 /// Counted: the gyroscope and low-g batch rates (Table 40, p60), the high-g channel at its ODR when
 /// it is batched (COUNTER_BDR_REG1 has no rate field, p62; the rate is taken as the high-g ODR),
@@ -283,6 +285,7 @@ pub const fn fifo_words_per_second_mhz(config: &Config, freq_fine: i8) -> u32 {
     };
     // bound: each term is at most 7_680_000 and there are five, so the sum is below 4e7.
     let total = gyro + accel + high_g + temperature + timestamp;
+    let freq_fine = if config.mode.is_haodr() { 0 } else { freq_fine };
     calc::scale_rate_mhz(total, freq_fine)
 }
 
@@ -575,6 +578,13 @@ mod tests {
         );
         assert_eq!(fifo_words_per_second_mhz(&slow, 0), 1_875);
         assert_eq!(fifo_words_per_second(&slow, 0), 2);
+        // The trim scales the normal mode (7680 * 0.9961 = 7650.048) but not the high-accuracy
+        // ODR mode (6.1.4 and Table 3, p13, p34).
+        assert_eq!(fifo_words_per_second_mhz(&g, -3), 7_650_048);
+        let haodr = g.with_mode(crate::OperatingMode::HighAccuracyOdr(
+            crate::HaodrSet::Base960,
+        ));
+        assert_eq!(fifo_words_per_second_mhz(&haodr, -3), 7_680_000);
         // Timestamp at 1/32 of 1.875 Hz: 58.59 mHz, rounded up to 59.
         let ts = slow.with_fifo(slow.fifo.with_timestamp(TimestampBatch::Dec32));
         assert_eq!(fifo_words_per_second_mhz(&ts, 0), 1_875 + 59);

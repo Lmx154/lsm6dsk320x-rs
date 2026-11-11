@@ -70,14 +70,12 @@ fn base_cfg() -> Config {
 }
 
 fn cfg_with(weight: Option<OffsetWeight>, hg_offset: bool) -> Config {
-    base_cfg()
-        .with_accel_offset(weight)
-        .with_high_g(Some(
-            HighGConfig::new()
-                .with_odr(HighGOdr::Hz960)
-                .with_full_scale(HIGH_G_FS)
-                .with_user_offset(hg_offset),
-        ))
+    base_cfg().with_accel_offset(weight).with_high_g(Some(
+        HighGConfig::new()
+            .with_odr(HighGOdr::Hz960)
+            .with_full_scale(HIGH_G_FS)
+            .with_user_offset(hg_offset),
+    ))
 }
 
 fn low(v: [i8; 3]) -> Offsets {
@@ -282,7 +280,10 @@ impl<S: SpiDevice> Rig<'_, S> {
         let set1 = Offsets::new()
             .with_low_g([64, -32, 16])
             .with_high_g([4, -4, 2]);
-        let Some(d) = self.step("c1 registers set, not applied", &set1, &base).await else {
+        let Some(d) = self
+            .step("c1 registers set, not applied", &set1, &base)
+            .await
+        else {
             return;
         };
         check!(
@@ -357,7 +358,10 @@ impl<S: SpiDevice> Rig<'_, S> {
             "{} c3 offsets() after configure: {}",
             self.imu.offsets()
         );
-        let Some(ref3) = self.reference("c3 (offset +8 loaded, not zero)", &base).await else {
+        let Some(ref3) = self
+            .reference("c3 (offset +8 loaded, not zero)", &base)
+            .await
+        else {
             return;
         };
         let _ = ref3;
@@ -387,7 +391,11 @@ impl<S: SpiDevice> Rig<'_, S> {
             d.lo[0]
         );
         if let Some(d) = self.step("c3 0", &Offsets::new(), &ref3).await {
-            check!(self.fails, d.quiet(NONE, NONE), "{} c3 0 returns to baseline");
+            check!(
+                self.fails,
+                d.quiet(NONE, NONE),
+                "{} c3 0 returns to baseline"
+            );
         }
         self.verify("c3").await;
 
@@ -444,7 +452,10 @@ impl<S: SpiDevice> Rig<'_, S> {
         let Some(ref4c) = self.reference("c4 coarse", &base).await else {
             return;
         };
-        if let Some(d) = self.step("c4 coarse bit, +4 on X", &high(axis(0, 4)), &ref4c).await {
+        if let Some(d) = self
+            .step("c4 coarse bit, +4 on X", &high(axis(0, 4)), &ref4c)
+            .await
+        {
             defmt::info!(
                 "[STAT] c4 high-g X +4: fine bit {} mg, coarse bit {} mg",
                 x_plus,
@@ -528,7 +539,12 @@ impl<S: SpiDevice> Rig<'_, S> {
         );
         if let Some(m) = self.meas().await {
             let d = m.minus(&ref6);
-            defmt::info!("[STAT] c6 after configure: dlow {} mg, dgyro {} dps, dhigh {} mg", d.lo, d.gy, d.hg);
+            defmt::info!(
+                "[STAT] c6 after configure: dlow {} mg, dgyro {} dps, dhigh {} mg",
+                d.lo,
+                d.gy,
+                d.hg
+            );
             check!(
                 self.fails,
                 within(d.lo[0], 62.5, 10.0) && d.quiet(0, NONE),
@@ -548,7 +564,12 @@ impl<S: SpiDevice> Rig<'_, S> {
         );
         if let Some(m) = self.meas().await {
             let d = m.minus(&ref6);
-            defmt::info!("[STAT] c6 after init: dlow {} mg, dgyro {} dps, dhigh {} mg", d.lo, d.gy, d.hg);
+            defmt::info!(
+                "[STAT] c6 after init: dlow {} mg, dgyro {} dps, dhigh {} mg",
+                d.lo,
+                d.gy,
+                d.hg
+            );
             check!(
                 self.fails,
                 d.quiet(NONE, NONE),

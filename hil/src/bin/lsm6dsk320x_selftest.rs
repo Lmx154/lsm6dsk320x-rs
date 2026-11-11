@@ -108,7 +108,9 @@ fn channel_cfg(ci: usize) -> Config {
         .with_gyro_odr(Odr::Off)
         .with_high_g(None);
     match ci {
-        0 => c.with_accel_fs(AccelFullScale::G4).with_accel_odr(Odr::Hz60),
+        0 => c
+            .with_accel_fs(AccelFullScale::G4)
+            .with_accel_odr(Odr::Hz60),
         1 => c
             .with_gyro_fs(GyroFullScale::Dps250)
             .with_gyro_odr(Odr::Hz240),
@@ -229,7 +231,11 @@ fn analyse(
         sq += d * d;
         cnt += 1;
     }
-    let rms = if cnt > 0 { sqrt((sq / cnt) as f32) } else { 0.0 };
+    let rms = if cnt > 0 {
+        sqrt((sq / cnt) as f32)
+    } else {
+        0.0
+    };
     let nband = band.max((3.0 * rms) as i32);
     let nb = settle_us(s, a, fin, nband, false);
     // Window means of at least three samples: their noise is at most rms / sqrt(3), so 2 rms is a
@@ -405,7 +411,12 @@ impl<S: SpiDevice> Rig<S> {
     /// otherwise statistics only. `rec`: sign index to record the differences under.
     async fn st_run(&mut self, label: &str, t: &SelfTestConfig, enforce: bool, rec: Option<usize>) {
         if self.too_late() {
-            check!(self.fails, false, "{} {} skipped: run deadline or bus failures", label);
+            check!(
+                self.fails,
+                false,
+                "{} {} skipped: run deadline or bus failures",
+                label
+            );
             return;
         }
         let before = self.imu.config().copied();
@@ -482,7 +493,12 @@ impl<S: SpiDevice> Rig<S> {
         }
         self.verify(label).await;
         let same = self.imu.config().copied() == before && before.is_some();
-        check!(self.fails, same, "{} {} config() is the one applied before", label);
+        check!(
+            self.fails,
+            same,
+            "{} {} config() is the one applied before",
+            label
+        );
         self.plausible(label, 100).await;
     }
 
@@ -545,7 +561,12 @@ impl<S: SpiDevice> Rig<S> {
 
     async fn settling(&mut self, ci: usize) {
         if self.too_late() {
-            check!(self.fails, false, "{} settle {} skipped: run deadline", NAME[ci]);
+            check!(
+                self.fails,
+                false,
+                "{} settle {} skipped: run deadline",
+                NAME[ci]
+            );
             return;
         }
         let cfg = channel_cfg(ci);
@@ -686,9 +707,18 @@ impl<S: SpiDevice> Rig<S> {
         self.st_run("c2 neg1", &neg, true, Some(1)).await;
         self.st_run("c2 neg2", &neg, true, Some(1)).await;
         let alone = [
-            ("c2 alone lowg", SelfTestConfig::new().with_gyro(false).with_high_g(false)),
-            ("c2 alone gyro", SelfTestConfig::new().with_low_g(false).with_high_g(false)),
-            ("c2 alone highg", SelfTestConfig::new().with_low_g(false).with_gyro(false)),
+            (
+                "c2 alone lowg",
+                SelfTestConfig::new().with_gyro(false).with_high_g(false),
+            ),
+            (
+                "c2 alone gyro",
+                SelfTestConfig::new().with_low_g(false).with_high_g(false),
+            ),
+            (
+                "c2 alone highg",
+                SelfTestConfig::new().with_low_g(false).with_gyro(false),
+            ),
         ];
         for (l, tc) in alone {
             self.st_run(l, &tc, true, Some(0)).await;
@@ -726,7 +756,12 @@ impl<S: SpiDevice> Rig<S> {
             Ok(cur) => {
                 let w = (cur & !reg::CTRL10_ST_XL_MASK) | reg::SELF_TEST_POSITIVE;
                 let wr = self.imu.write_register(reg::CTRL10, w).await;
-                check!(self.fails, wr.is_ok(), "{} c6 raw write of ST_XL: {}", defmt::Debug2Format(&wr));
+                check!(
+                    self.fails,
+                    wr.is_ok(),
+                    "{} c6 raw write of ST_XL: {}",
+                    defmt::Debug2Format(&wr)
+                );
             }
             Err(_) => {
                 self.bus_errs += 1;

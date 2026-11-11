@@ -17,7 +17,7 @@
 //!    ODR mode and the operating mode, while the sensors are still in power-down.
 //! 4. The FIFO, the timestamp counter being on already.
 //! 5. The ODRs: high-g, low-g, gyroscope. Writing a nonzero ODR turns the sensor on.
-//! 6. With the gyroscope on, 40 ms for its turn-on time (Table 4, p15).
+//! 6. With the gyroscope on, 70 ms for its turn-on time ([`GYRO_TURN_ON_US`]).
 //!
 //! The turn-on time of the accelerometers and the filter settling times are not in the datasheet,
 //! which refers to the application note (6, p33; CTRL4 note, p68): the plan adds no delay for them.
@@ -26,8 +26,12 @@
 use crate::config::{Config, ConfigError};
 use crate::reg;
 
-/// Turn-on time of the gyroscope, Table 4 (p15), in microseconds.
-pub const GYRO_TURN_ON_US: u32 = 40_000;
+/// Wait after starting the gyroscope, in microseconds: 70 ms. The datasheet's turn-on time is 40 ms
+/// in the typical column, "not guaranteed" (Table 4, p15). Measured on the MARV V2 board,
+/// 2026-11-11: gyroscope samples were clean from about 65 ms after the sensor was started and off
+/// by up to 6.6 dps before that (see [`Config::drdy_mask`]); 70 ms is the measured figure plus
+/// margin.
+pub const GYRO_TURN_ON_US: u32 = 70_000;
 
 /// Most steps a plan can hold. The longest plan, in place with everything on, has 33.
 pub const MAX_STEPS: usize = 34;
@@ -174,7 +178,7 @@ impl Config {
     ///
     /// For `Config::default()` and [`Apply::AfterReset`] the plan is the writes `init` has always
     /// made after the identity check (CTRL3 as 0x44, IF_CFG, CTRL4, INT1_CTRL, INT2_CTRL, CTRL7, CTRL8, CTRL6,
-    /// CTRL1_XL_HG, CTRL1, CTRL2, then the 40 ms gyroscope turn-on) plus PIN_CTRL, which is always
+    /// CTRL1_XL_HG, CTRL1, CTRL2, then the 70 ms gyroscope turn-on) plus PIN_CTRL, which is always
     /// written because a software reset does not restore it (p57).
     pub fn plan(&self, apply: Apply) -> Result<Plan, ConfigError> {
         self.validate()?;

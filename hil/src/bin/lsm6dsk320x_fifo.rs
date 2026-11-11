@@ -56,7 +56,13 @@ macro_rules! need {
         match $e {
             Ok(v) => v,
             Err(e) => {
-                check!($fails, false, "{} {} failed: {}", $what, defmt::Debug2Format(&e));
+                check!(
+                    $fails,
+                    false,
+                    "{} {} failed: {}",
+                    $what,
+                    defmt::Debug2Format(&e)
+                );
                 return;
             }
         }
@@ -343,8 +349,16 @@ impl Scan {
             self.temp_rest,
             self.ts_rest
         );
-        defmt::info!("[STAT] {} TAG_SENSOR of first 16 words {}", label, self.sensors);
-        defmt::info!("[STAT] {} TAG_CNT of first 16 words    {}", label, self.slots);
+        defmt::info!(
+            "[STAT] {} TAG_SENSOR of first 16 words {}",
+            label,
+            self.sensors
+        );
+        defmt::info!(
+            "[STAT] {} TAG_CNT of first 16 words    {}",
+            label,
+            self.slots
+        );
     }
 
     /// Delta statistics in microseconds: (min, max, mean).
@@ -363,7 +377,13 @@ impl Scan {
         let balanced = g.abs_diff(self.accel) <= 1;
         let ts_ok = self.ts + 1 >= g / 8 && self.ts <= g / 8 + 2;
         let temp_ok = self.temp + 2 >= g / 16 && self.temp <= g / 16 + 2;
-        self.unknown == 0 && self.trailing == 0 && self.cfg == 0 && g > 0 && balanced && ts_ok && temp_ok
+        self.unknown == 0
+            && self.trailing == 0
+            && self.cfg == 0
+            && g > 0
+            && balanced
+            && ts_ok
+            && temp_ok
     }
 }
 
@@ -432,7 +452,13 @@ where
         };
         match r {
             Ok(_) => verify_is_ok(fails, label, imu).await,
-            Err(e) => check!(*fails, false, "{} {} failed: {}", label, defmt::Debug2Format(&e)),
+            Err(e) => check!(
+                *fails,
+                false,
+                "{} {} failed: {}",
+                label,
+                defmt::Debug2Format(&e)
+            ),
         }
     }
 }
@@ -448,9 +474,18 @@ where
     verify_is_ok(fails, "baseline", imu).await;
     let v = need!(*fails, "read CTRL6", imu.read_register(reg::CTRL6).await);
     let w = v & !reg::CTRL6_FS_G_MASK;
-    need!(*fails, "write CTRL6", imu.write_register(reg::CTRL6, w).await);
+    need!(
+        *fails,
+        "write CTRL6",
+        imu.write_register(reg::CTRL6, w).await
+    );
     let back = need!(*fails, "read CTRL6", imu.read_register(reg::CTRL6).await);
-    defmt::info!("[STAT] CTRL6 was 0x{=u8:x}, written 0x{=u8:x}, read back 0x{=u8:x}", v, w, back);
+    defmt::info!(
+        "[STAT] CTRL6 was 0x{=u8:x}, written 0x{=u8:x}, read back 0x{=u8:x}",
+        v,
+        w,
+        back
+    );
     match imu.verify().await {
         Err(Error::ConfigMismatch(m)) => {
             defmt::info!(
@@ -474,7 +509,11 @@ where
             defmt::Debug2Format(&other)
         ),
     }
-    need!(*fails, "configure(a)", imu.configure(&mut d, &cfg_a()).await);
+    need!(
+        *fails,
+        "configure(a)",
+        imu.configure(&mut d, &cfg_a()).await
+    );
     verify_is_ok(fails, "restore by configure(a)", imu).await;
 }
 
@@ -523,7 +562,13 @@ fn eval4(fails: &mut u32, label: &str, s: &Scan, info: &Info, cfg: &Config, reg_
     let g = mean3(s.gsum, s.gyro);
     let am = mag(a) / G;
     let gd = g.map(|v| v * DEG);
-    defmt::info!("[STAT] {} accel mean {} g axes, |a| {} g; gyro mean {} dps", label, a.map(|v| v / G), am, gd);
+    defmt::info!(
+        "[STAT] {} accel mean {} g axes, |a| {} g; gyro mean {} dps",
+        label,
+        a.map(|v| v / G),
+        am,
+        gd
+    );
     let _ = cfg;
     check!(
         *fails,
@@ -582,7 +627,11 @@ where
     let mut single = [0u8; 56 * WORD];
     let mut errs = 0u32;
     for i in 0..56 {
-        if imu.fifo_read_exact(&mut single[i * WORD..], 1).await.is_err() {
+        if imu
+            .fifo_read_exact(&mut single[i * WORD..], 1)
+            .await
+            .is_err()
+        {
             errs += 1;
         }
     }
@@ -678,7 +727,8 @@ where
     need!(*fails, "fifo_flush", imu.fifo_flush().await);
     let ov0 = imu.stats().fifo_overruns;
     Timer::after_millis(400).await;
-    let (mut max_words, mut full, mut ovr, mut latched, mut wtm) = (0u16, false, false, false, false);
+    let (mut max_words, mut full, mut ovr, mut latched, mut wtm) =
+        (0u16, false, false, false, false);
     let mut first = None;
     for _ in 0..6 {
         let st = need!(*fails, "fifo_status", imu.fifo_status().await);
@@ -693,7 +743,11 @@ where
     }
     let ov1 = imu.stats().fifo_overruns;
     if let Some(f) = first {
-        defmt::info!("[STAT] first status after 400 ms: words {}, flags {}", f.words, f.flags);
+        defmt::info!(
+            "[STAT] first status after 400 ms: words {}, flags {}",
+            f.words,
+            f.flags
+        );
     }
     defmt::info!(
         "[STAT] largest unread count {} words; any: wtm {} full {} overrun {} latched {}; stats overruns {} -> {}",
@@ -727,7 +781,11 @@ where
     );
     need!(*fails, "fifo_flush", imu.fifo_flush().await);
     let st = need!(*fails, "fifo_status", imu.fifo_status().await);
-    defmt::info!("[STAT] status right after flush: words {}, flags {}", st.words, st.flags);
+    defmt::info!(
+        "[STAT] status right after flush: words {}, flags {}",
+        st.words,
+        st.flags
+    );
     check!(
         *fails,
         st.words <= 3 && !st.flags.any_overrun(),
@@ -750,7 +808,12 @@ where
     need!(*fails, "fifo_flush", imu.fifo_flush().await);
     Timer::after_millis(300).await;
     let r = need!(*fails, "fifo_read", imu.fifo_read(&mut buf).await);
-    defmt::info!("[STAT] overrun FIFO read in one burst: {} words, unread after {}, flags {}", r.words, r.unread.unwrap_or(0xFFFF), r.flags);
+    defmt::info!(
+        "[STAT] overrun FIFO read in one burst: {} words, unread after {}, flags {}",
+        r.words,
+        r.unread.unwrap_or(0xFFFF),
+        r.flags
+    );
     let mut s = Scan::new(0.0);
     s.feed(&buf[..r.bytes], &cfg);
     s.print("full FIFO");
@@ -823,14 +886,28 @@ where
     );
     check!(
         *fails,
-        errors == 0 && scan.words == 5600 && scan.unknown == 0 && scan.trailing == 0 && scan.d_bad == 0 && scan.d_n > 100,
+        errors == 0
+            && scan.words == 5600
+            && scan.unknown == 0
+            && scan.trailing == 0
+            && scan.d_bad == 0
+            && scan.d_n > 100,
         "{} 5600 words, none unknown ({}), timestamps without a gap (bad deltas {})",
         scan.unknown,
         scan.d_bad
     );
     match imu.fifo_status().await {
-        Ok(st) => defmt::info!("[STAT] fifo_status after the loop: words {}, flags {}", st.words, st.flags),
-        Err(e) => check!(*fails, false, "{} fifo_status failed: {}", defmt::Debug2Format(&e)),
+        Ok(st) => defmt::info!(
+            "[STAT] fifo_status after the loop: words {}, flags {}",
+            st.words,
+            st.flags
+        ),
+        Err(e) => check!(
+            *fails,
+            false,
+            "{} fifo_status failed: {}",
+            defmt::Debug2Format(&e)
+        ),
     }
 }
 
@@ -842,7 +919,11 @@ where
     defmt::info!("[INFO] check 8: high-g words");
     let mut d = Delay;
     for with_low in [false, true] {
-        let label = if with_low { "high-g+gyro+accel" } else { "high-g alone" };
+        let label = if with_low {
+            "high-g+gyro+accel"
+        } else {
+            "high-g alone"
+        };
         let cfg = cfg_high_g(with_low);
         need!(*fails, "init", imu.init(&mut d, &cfg).await);
         need!(*fails, "fifo_flush", imu.fifo_flush().await);

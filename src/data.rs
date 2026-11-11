@@ -324,6 +324,12 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
     /// DIFF_FIFO count, and the FIFO_WTM_IA, FIFO_OVR_IA and FIFO_FULL_IA flags are states. An
     /// overrun shown is counted in [`Stats::fifo_overruns`].
     ///
+    /// The data-ready flags of the report (STATUS_REG) stay set until the data is read, also
+    /// across [`configure`](Lsm6dsk320x::configure) and also when the sensor is then off
+    /// (measured on the MARV V2 board, 2026-11-11: 150 of 150 polls; one read of the data cleared
+    /// the flag for good). Read the data once after `configure` before relying on the flags of a
+    /// sensor that was switched off or reconfigured.
+    ///
     /// A failed or cancelled call that had already read FIFO_STATUS2 has consumed the latched
     /// overrun flag: it is counted in the stats but the call returns no report of it.
     /// [`Error::NotConfigured`] before any bus access.

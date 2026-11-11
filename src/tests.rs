@@ -957,7 +957,7 @@ fn legacy_init_steps() -> Vec<Step> {
         w(reg::CTRL1_XL_HG, 0x00),
         w(reg::CTRL1, 0x09),
         w(reg::CTRL2, 0x09),
-        DelayUs(40_000),
+        DelayUs(70_000),
     ]
 }
 
@@ -1010,7 +1010,7 @@ fn plan_legacy_with_high_g_and_gyro_off() {
             w(reg::CTRL1_XL_HG, 0x80 | (4 << 3) | 1),
             w(reg::CTRL1, 0x09),
             w(reg::CTRL2, 0x07),
-            DelayUs(40_000),
+            DelayUs(70_000),
         ]
     );
     let off = c.with_gyro_odr(Odr::Off).plan(Apply::AfterReset).unwrap();
@@ -1089,7 +1089,7 @@ fn plan_orders_new_registers_around_the_legacy_ones() {
         mask: 0xC0,
         value: 0x40
     }));
-    assert_eq!(plan.steps().last(), Some(&DelayUs(40_000)));
+    assert_eq!(plan.steps().last(), Some(&DelayUs(70_000)));
     // The ODRs come last, the FIFO mode before them.
     assert_eq!(Step::modified(0x3F, 0xC0, 0x40), 0x7F);
 }
@@ -1108,7 +1108,7 @@ fn plan_haodr_sets_the_mode_in_power_down_first() {
             w(reg::CTRL1_XL_HG, 0x00),
             w(reg::CTRL1, 0x19),
             w(reg::CTRL2, 0x19),
-            DelayUs(40_000),
+            DelayUs(70_000),
         ]
     );
     assert!(plan.steps().contains(&w(reg::HAODR_CFG, 0x01)));
@@ -1784,7 +1784,7 @@ proptest! {
                     }
                     DelayUs(us) => {
                         delays += 1;
-                        prop_assert_eq!(us, 40_000);
+                        prop_assert_eq!(us, 70_000);
                     }
                 }
             }

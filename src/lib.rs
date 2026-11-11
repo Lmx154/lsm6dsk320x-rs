@@ -174,19 +174,44 @@ pub struct Info {
     pub who_am_i: u8,
     /// INTERNAL_FREQ_FINE as read: the signed factory trim of the internal clock (9.54, p92).
     pub freq_fine: i8,
-    /// Real gyroscope output rate in millihertz, 0 when it is off (see [`calc::real_odr_mhz`]).
+    /// Output rate of the gyroscope in millihertz, 0 when it is off. In the normal mode this is
+    /// the real rate with the clock trim (see [`calc::real_odr_mhz`]). In the high-accuracy ODR
+    /// mode it is the nominal table rate of the selected set (Table 22, p34) with no trim: the
+    /// datasheet gives the rate variation there as +-1 % with the gyroscope on and +-3 % with it
+    /// off (Table 3, p13; "values specified by design", p14) and does not apply the
+    /// INTERNAL_FREQ_FINE formula (9.54, p92) to it. Measured on the MARV V2 board, 2026-11-11:
+    /// set 960 Hz setting 960 gave 957.66 Hz, set 1000 gave 999.998 Hz, set 800 gave 800.664 Hz
+    /// and set 833 gave 833.998 Hz, each within 0.3 % of the table value, while the normal mode
+    /// at the 960 Hz setting gave 942.664 Hz (this field: 942 528).
     pub gyro_odr_mhz: u32,
-    /// Real low-g accelerometer output rate in millihertz, 0 when it is off.
+    /// Output rate of the low-g accelerometer in millihertz, 0 when it is off; the same rule as
+    /// [`gyro_odr_mhz`](Self::gyro_odr_mhz).
     pub accel_odr_mhz: u32,
-    /// Real high-g accelerometer output rate in millihertz, 0 when it is off.
+    /// Output rate of the high-g accelerometer in millihertz, 0 when it is off. In the
+    /// high-accuracy ODR mode it is the nominal rate of the high-g setting with no trim (the
+    /// datasheet applies the mode to the high-g accelerometers, 6.1.4, p34, but gives no ODR set
+    /// table for them; not measured).
     pub high_g_odr_mhz: u32,
-    /// Expected FIFO words per second, rounded up (see [`fifo::fifo_words_per_second`]).
+    /// Expected FIFO words per second, rounded up (see [`fifo::fifo_words_per_second`]); with no
+    /// clock trim in the high-accuracy ODR mode.
     pub fifo_words_per_second: u32,
 }
 
 /// Polls of CTRL3 after a software reset, 100 µs apart (the reset has been measured at about 230 µs).
 const RESET_POLLS: u32 = 1000;
 const RESET_POLL_US: u32 = 100;
+
+/// The rate [`Info`] reports for `odr`: the trimmed real rate in the normal mode, the table rate
+/// of the selected set without the trim in the high-accuracy ODR mode.
+const fn reported_odr_mhz(config: &Config, odr: Odr, freq_fine: i8) -> u32 {
+    match config.mode {
+        OperatingMode::HighAccuracyOdr(set) => match odr.haodr_mhz(set) {
+            Some(mhz) => mhz,
+            None => 0,
+        },
+        _ => calc::real_odr_mhz(odr, freq_fine),
+    }
+}
 
 /// The configuration the chip is known to hold, and the trim read with it.
 #[derive(Clone, Copy)]
@@ -255,8 +280,10 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
     /// Resets the chip, checks WHO_AM_I and applies `config` ([`Apply::AfterReset`] plan).
     ///
     /// The driver is not configured from the start of this call until it returns `Ok`. When the
-    /// gyroscope is enabled the plan includes its 40 ms turn-on time (datasheet p15), so `read()`
-    /// gives valid data once `init` returns.
+    /// gyroscope is enabled the plan includes a 70 ms wait ([`plan::GYRO_TURN_ON_US`]; the
+    /// datasheet's 40 ms is typical, not guaranteed, Table 4 p15; measured on the MARV V2 board,
+    /// 2026-11-11: clean from about 65 ms), so the first gyroscope samples are valid once `init`
+    /// returns; see [`Config::drdy_mask`].
     ///
     /// The user offsets ([`set_offsets`](Self::set_offsets)) are cleared: the plan is followed by
     /// two writes of 0 to the six offset registers (see below), and [`offsets`](Self::offsets)
@@ -360,11 +387,12 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
         let info = Info {
             who_am_i,
             freq_fine,
-            gyro_odr_mhz: calc::real_odr_mhz(config.gyro_odr, freq_fine),
-            accel_odr_mhz: calc::real_odr_mhz(config.accel_odr, freq_fine),
-            high_g_odr_mhz: match config.high_g {
-                Some(h) => calc::scale_rate_mhz(h.odr.nominal_mhz(), freq_fine),
-                None => 0,
+            gyro_odr_mhz: reported_odr_mhz(config, config.gyro_odr, freq_fine),
+            accel_odr_mhz: reported_odr_mhz(config, config.accel_odr, freq_fine),
+            high_g_odr_mhz: match (config.high_g, config.mode) {
+                (Some(h), OperatingMode::HighAccuracyOdr(_)) => h.odr.nominal_mhz(),
+                (Some(h), _) => calc::scale_rate_mhz(h.odr.nominal_mhz(), freq_fine),
+                (None, _) => 0,
             },
             fifo_words_per_second: fifo::fifo_words_per_second(config, freq_fine),
         };
@@ -489,6 +517,13 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
     }
 
     /// STATUS_REG.
+    ///
+    /// A data-ready flag stays set until the data is read, also across [`configure`](Self::configure)
+    /// and also when the sensor is then off. Measured on the MARV V2 board, 2026-11-11: a sample
+    /// left unread kept its flag set in 150 of 150 polls after a `configure` that left that
+    /// sensor off; one read of the data cleared it and it stayed clear. An application that relies
+    /// on these flags for a sensor it has just switched off or reconfigured must read the data
+    /// once after `configure` and discard it.
     pub async fn status(&mut self) -> Result<Status, Error<SPI::Error>> {
         self.ensure_configured()?;
         Ok(Status::from_bits(

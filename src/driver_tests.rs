@@ -156,8 +156,8 @@ fn init_default_golden_trace() {
         // CTRL1 (0x10, p65): low-g 960 Hz high-performance; CTRL2 (0x11, p66): gyro 960 Hz.
         w(0x10, 0x09),
         w(0x11, 0x09),
-        // Gyroscope turn-on, 40 ms (Table 4, p15).
-        Event::Delay(40_000_000),
+        // Gyroscope turn-on, 70 ms (GYRO_TURN_ON_US; Table 4, p15 gives 40 ms typical).
+        Event::Delay(70_000_000),
         // The user offsets cleared: XL_HG_{X,Y,Z}_OFS_USR (0x6C to 0x6E, p108) and
         // {X,Y,Z}_OFS_USR (0x73 to 0x75, p113), one burst each.
         Event::Spi(vec![Op::Write(vec![0x6C, 0, 0, 0])]),
@@ -177,6 +177,39 @@ fn init_default_golden_trace() {
     assert_eq!(info.high_g_odr_mhz, 0);
     assert_eq!(info.fifo_words_per_second, 0);
     assert_eq!(imu.config(), Some(&Config::new()));
+}
+
+/// Table 22 (p34): in the high-accuracy ODR mode `Info` reports the table rate of the set, with no
+/// trim (the chip's INTERNAL_FREQ_FINE is -3 here, which would give 956 256 at the 960 setting).
+#[test]
+fn init_reports_the_table_rate_without_trim_in_haodr_mode() {
+    for (set, mhz) in [
+        (crate::HaodrSet::Base960, 960_000),
+        (crate::HaodrSet::Base1000, 1_000_000),
+        (crate::HaodrSet::Base800, 800_000),
+        (crate::HaodrSet::Base833, 833_000),
+    ] {
+        let (_shared, mut imu, mut delay) = rig();
+        let config = Config::new().with_mode(crate::OperatingMode::HighAccuracyOdr(set));
+        let info = run(imu.init(&mut delay, &config)).unwrap();
+        assert_eq!(info.freq_fine, -3);
+        assert_eq!(info.gyro_odr_mhz, mhz);
+        assert_eq!(info.accel_odr_mhz, mhz);
+    }
+}
+
+/// With the low-g accelerometer off, only the gyroscope has a rate; the off sensor reports 0.
+#[test]
+fn init_reports_zero_for_an_off_sensor_in_haodr_mode() {
+    let (_shared, mut imu, mut delay) = rig();
+    let config = Config::new()
+        .with_mode(crate::OperatingMode::HighAccuracyOdr(
+            crate::HaodrSet::Base1000,
+        ))
+        .with_accel_odr(Odr::Off);
+    let info = run(imu.init(&mut delay, &config)).unwrap();
+    assert_eq!(info.accel_odr_mhz, 0);
+    assert_eq!(info.gyro_odr_mhz, 1_000_000);
 }
 
 /// The one transaction of a read: `[Write(address | 0x80), Read(n bytes)]`, nothing else.
@@ -457,7 +490,7 @@ fn configure_in_place_with_other_settings_ends_with_the_new_config() {
         !shared
             .log()
             .iter()
-            .any(|e| matches!(e, Event::Delay(40_000_000)))
+            .any(|e| matches!(e, Event::Delay(70_000_000)))
     );
 }
 

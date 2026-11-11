@@ -31,7 +31,7 @@ Pins: see "Pins and bus" below.
 - Sensitivity (p12): low-g mg/LSB +-2 g 0.061, +-4 g 0.122, +-8 g 0.244, +-16 g 0.488. High-g mg/LSB +-32 g
   0.976, +-64 g 1.952, +-128 g 3.904, +-256 g 7.808, +-320 g 10.417. Gyro mdps/LSB +-250 8.75, +-500 17.5,
   +-1000 35, +-2000 70, +-4000 140.
-- Temperature: degC = raw/256 + 25 (p16). Gyro turn-on 40 ms (p15).
+- Temperature: degC = raw/256 + 25 (p16). Gyro turn-on 40 ms, typical, not guaranteed (Table 4, p15); measured on the MARV V2 board, 2026-11-11: clean gyro samples from about 65 ms after the start. The driver waits 70 ms.
 - ODR accuracy in normal high-performance mode is not specified (the +-1 %/+-3 % figures on p13 are for
   high-accuracy-ODR mode). Measured: the output rate runs 1.8 % below nominal (the ODR setting is not recorded).
 - High-g zero-g offset: +-250 mg typical (Table 3, p12).

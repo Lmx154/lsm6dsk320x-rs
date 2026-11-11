@@ -8,9 +8,9 @@
 use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_rp::gpio::{Input, Level, Output, Pull};
+use embassy_rp::peripherals::{DMA_CH0, DMA_CH1};
 use embassy_rp::spi::{self, Spi};
 use embassy_rp::{bind_interrupts, dma};
-use embassy_rp::peripherals::{DMA_CH0, DMA_CH1};
 use embassy_time::{Delay, Duration, Instant, Timer, with_timeout};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use lsm6dsk320x::{Config, Error, Lsm6dsk320x, RawSample};
@@ -40,7 +40,11 @@ const SWEEP_BLOCKS: u32 = 2;
 const SWEEP_PAST_T_US: u32 = 2;
 const RUN_LIMIT_S: u64 = 50;
 
-type Dev = ExclusiveDevice<Spi<'static, embassy_rp::peripherals::SPI1, spi::Async>, Output<'static>, Delay>;
+type Dev = ExclusiveDevice<
+    Spi<'static, embassy_rp::peripherals::SPI1, spi::Async>,
+    Output<'static>,
+    Delay,
+>;
 type E = Error<<Dev as embedded_hal::spi::ErrorType>::Error>;
 
 /// Logs a verdict line. The format string starts with a `{}` that receives the tag.
@@ -101,7 +105,10 @@ impl Ctx {
     fn check_time(&mut self) -> bool {
         if self.start.elapsed() > Duration::from_secs(RUN_LIMIT_S) {
             self.time_up = true;
-            defmt::error!("[FAIL] run time limit of {} s reached, stopping", RUN_LIMIT_S);
+            defmt::error!(
+                "[FAIL] run time limit of {} s reached, stopping",
+                RUN_LIMIT_S
+            );
         }
         self.time_up
     }
@@ -124,7 +131,14 @@ impl Ctx {
         match r {
             Ok(s) => defmt::error!(
                 "[FAIL] {} at d={} us: accel raw {} {} {}, gyro raw {} {} {}",
-                what, d, s.accel.x, s.accel.y, s.accel.z, s.gyro.x, s.gyro.y, s.gyro.z
+                what,
+                d,
+                s.accel.x,
+                s.accel.y,
+                s.accel.z,
+                s.gyro.x,
+                s.gyro.y,
+                s.gyro.z
             ),
             Err(e) => defmt::error!("[FAIL] {} at d={} us: {}", what, d, defmt::Debug2Format(e)),
         }
@@ -134,7 +148,12 @@ impl Ctx {
         match e {
             Error::ConfigMismatch(m) => defmt::error!(
                 "[FAIL] {} at d={} us: register 0x{=u8:x} mask 0x{=u8:x} expected 0x{=u8:x} found 0x{=u8:x}",
-                what, d, m.register, m.mask, m.expected, m.found
+                what,
+                d,
+                m.register,
+                m.mask,
+                m.expected,
+                m.found
             ),
             _ => defmt::error!("[FAIL] {} at d={} us: {}", what, d, defmt::Debug2Format(e)),
         }
@@ -275,11 +294,21 @@ impl Ctx {
     /// The reference and T. Returns the median T in microseconds, or None.
     async fn phase0(&mut self) -> Option<u32> {
         if let Err(e) = self.imu.init(&mut Delay, &self.cfg).await {
-            check!(self.fails, false, "{} phase 0 init: {}", defmt::Debug2Format(&e));
+            check!(
+                self.fails,
+                false,
+                "{} phase 0 init: {}",
+                defmt::Debug2Format(&e)
+            );
             return None;
         }
         let v = self.imu.verify().await;
-        check!(self.fails, v.is_ok(), "{} phase 0 verify after init: {}", defmt::Debug2Format(&v));
+        check!(
+            self.fails,
+            v.is_ok(),
+            "{} phase 0 verify after init: {}",
+            defmt::Debug2Format(&v)
+        );
         if v.is_err() {
             return None;
         }
@@ -302,7 +331,12 @@ impl Ctx {
             errors
         );
         if errors != 0 {
-            check!(self.fails, false, "{} phase 0 timing reads had {} errors", errors);
+            check!(
+                self.fails,
+                false,
+                "{} phase 0 timing reads had {} errors",
+                errors
+            );
             return None;
         }
 
@@ -346,7 +380,12 @@ impl Ctx {
             let r = self.imu.read().await;
             wrong += self.wrong(&r) as u32;
         }
-        check!(self.fails, wrong == 0, "{} phase 0: wrong reads in 1000 uncancelled: {}", wrong);
+        check!(
+            self.fails,
+            wrong == 0,
+            "{} phase 0: wrong reads in 1000 uncancelled: {}",
+            wrong
+        );
         if wrong != 0 {
             return None;
         }
@@ -406,7 +445,12 @@ impl Ctx {
         }
         let v = self.imu.verify().await;
         let ok = v.is_ok();
-        check!(self.fails, ok && sw.recover_failures == 0, "{} phase 1: every recover() Ok and verify() after the phase Ok ({})", defmt::Debug2Format(&v));
+        check!(
+            self.fails,
+            ok && sw.recover_failures == 0,
+            "{} phase 1: every recover() Ok and verify() after the phase Ok ({})",
+            defmt::Debug2Format(&v)
+        );
         if let Err(e) = v {
             self.show_err("phase 1 verify", 0, &e);
             self.sensor_fault = true;
@@ -434,8 +478,17 @@ impl Ctx {
             }
         }
         self.print_sweep("phase 2", &sw);
-        let ok = sw.recover_failures == 0 && sw.wrong == 0 && sw.verify_failures == 0 && sw.cancelled >= 300 && !self.time_up;
-        check!(self.fails, ok, "{} phase 2: the three failure counters are 0 and at least 300 really cancelled ({})", sw.cancelled);
+        let ok = sw.recover_failures == 0
+            && sw.wrong == 0
+            && sw.verify_failures == 0
+            && sw.cancelled >= 300
+            && !self.time_up;
+        check!(
+            self.fails,
+            ok,
+            "{} phase 2: the three failure counters are 0 and at least 300 really cancelled ({})",
+            sw.cancelled
+        );
     }
 
     async fn phase3(&mut self, t: u32) {
@@ -466,8 +519,18 @@ impl Ctx {
         }
         defmt::info!("[STAT] phase 3: data-ready edge timeouts {}", edge_timeouts);
         self.print_sweep("phase 3", &sw);
-        let ok = sw.recover_failures == 0 && sw.wrong == 0 && sw.verify_failures == 0 && sw.cancelled >= 150 && edge_timeouts <= 20 && !self.time_up;
-        check!(self.fails, ok, "{} phase 3: the three failure counters are 0 and at least 150 really cancelled ({})", sw.cancelled);
+        let ok = sw.recover_failures == 0
+            && sw.wrong == 0
+            && sw.verify_failures == 0
+            && sw.cancelled >= 150
+            && edge_timeouts <= 20
+            && !self.time_up;
+        check!(
+            self.fails,
+            ok,
+            "{} phase 3: the three failure counters are 0 and at least 150 really cancelled ({})",
+            sw.cancelled
+        );
     }
 
     /// One repair attempt after a sensor-side failure. True when the sensor answers again.
@@ -490,7 +553,11 @@ impl Ctx {
 
     async fn phase4(&mut self) {
         let init = self.imu.init(&mut Delay, &self.cfg).await;
-        let verify = if init.is_ok() { self.imu.verify().await } else { Err(Error::NotConfigured) };
+        let verify = if init.is_ok() {
+            self.imu.verify().await
+        } else {
+            Err(Error::NotConfigured)
+        };
         let mut wrong = 0u32;
         if init.is_ok() && verify.is_ok() {
             for _ in 0..200 {
@@ -527,7 +594,11 @@ async fn main(_spawner: Spawner) {
         imu: Lsm6dsk320x::new(dev),
         int1,
         cfg: Config::default(),
-        reference: Reference { accel_mg: [0.0; 3], gyro_dps: [0.0; 3], temp_c: 0.0 },
+        reference: Reference {
+            accel_mg: [0.0; 3],
+            gyro_dps: [0.0; 3],
+            temp_c: 0.0,
+        },
         fails: 0,
         cancels: 0,
         sensor_fault: false,
@@ -541,9 +612,18 @@ async fn main(_spawner: Spawner) {
         let planned =
             PHASE1_CANCELS + (t + SWEEP_PAST_T_US + 1) * BLOCK * SWEEP_BLOCKS + PHASE3_CANCELS;
         if planned > MAX_CANCELS {
-            check!(c.fails, false, "{} planned cancels {} exceed the limit of 2500, none made", planned);
+            check!(
+                c.fails,
+                false,
+                "{} planned cancels {} exceed the limit of 2500, none made",
+                planned
+            );
         } else {
-            defmt::info!("[INFO] planned cancels at most {} of {}", planned, MAX_CANCELS);
+            defmt::info!(
+                "[INFO] planned cancels at most {} of {}",
+                planned,
+                MAX_CANCELS
+            );
             c.phase1(t).await;
             if !c.stopped() {
                 c.phase2(t).await;
@@ -557,12 +637,21 @@ async fn main(_spawner: Spawner) {
     let mut bus_ok = true;
     if c.sensor_fault {
         bus_ok = c.repair().await;
-        check!(c.fails, false, "{} repair attempt ended, run fails (repair ok: {})", bus_ok);
+        check!(
+            c.fails,
+            false,
+            "{} repair attempt ended, run fails (repair ok: {})",
+            bus_ok
+        );
     }
     if bus_ok {
         c.phase4().await;
     } else {
-        check!(c.fails, false, "{} sensor normal at the end: NO, repair did not bring it back, final init not attempted");
+        check!(
+            c.fails,
+            false,
+            "{} sensor normal at the end: NO, repair did not bring it back, final init not attempted"
+        );
     }
     defmt::info!("[STAT] total cancels {}", c.cancels);
     hil_common::exit(c.fails)

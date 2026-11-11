@@ -665,7 +665,9 @@ impl AccelLpf2Bandwidth {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum DataReadyMode {
-    /// 65 us pulses. This is what `init` has always configured.
+    /// 65 us pulses (CTRL4, p68). This is what `init` has always configured. Measured on the MARV
+    /// V2 board, 2026-11-11: pulses of at least 51 us were seen, 57 us on average; a lower bound
+    /// of the observation, not a contradiction of the datasheet's 65 us.
     #[default]
     Pulsed,
     /// Held until the high byte of the output register is read (the device's reset state).
@@ -979,6 +981,9 @@ impl PadDrive {
 }
 
 /// Electrical settings of the interrupt pins.
+///
+/// Measured on the MARV V2 board, 2026-11-11: both polarities, open-drain and push-pull output,
+/// latched data-ready and the three drive settings behaved as documented here.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
@@ -1102,12 +1107,39 @@ pub struct Config {
     /// Gyroscope LPF1 bandwidth, or `None` for LPF1 off.
     pub gyro_lpf1: Option<GyroLpf1Bandwidth>,
     /// Low-g accelerometer LPF2 cutoff, or `None` for the first filtering stage only (ODR/2).
+    ///
+    /// A narrow cutoff settles slowly after the sensor is started, and the data-ready mask does
+    /// not cover all of it: see [`Self::drdy_mask`] and [`Self::accel_fast_settling`] (measured
+    /// on the MARV V2 board, 2026-11-11: ODR/100 at 240 Hz needed 170 ms to be within 10 % of
+    /// 1 g without fast settling). Noise fell with the bandwidth as expected.
     pub accel_lpf2: Option<AccelLpf2Bandwidth>,
-    /// Masks the data-ready signals until the filter settling ends (CTRL4 DRDY_MASK, p68). On by
-    /// default, so that every sample signalled after `init` is valid.
+    /// Masks the data-ready signals until the filter settling ends (CTRL4 DRDY_MASK, p68); each of
+    /// the low-g accelerometer, the high-g accelerometer and the gyroscope is masked independently.
+    /// On by default.
+    ///
+    /// The mask covers only the signalled data-ready of the sensor concerned, and only for the
+    /// settling the device knows about. Measured on the MARV V2 board, 2026-11-11, with both
+    /// sensors started by `configure`, the mask on and INT1 routed to the accelerometer's
+    /// data-ready: the first 4 gyroscope samples read after `configure` returned were off by up
+    /// to 6.6 dps from the later mean and the fifth by up to 2.3 dps (three runs). With INT1 routed
+    /// to the gyroscope's data-ready the first edge came 64.8 ms after `configure` started the
+    /// sensor and every sample was clean, so the gyroscope's data was valid about 65 ms after its
+    /// start. `configure` and `init` therefore wait 70 ms after starting the gyroscope (the
+    /// datasheet's 40 ms, Table 4 p15, is typical and not guaranteed), and the first gyroscope
+    /// samples are valid once they return, whichever data-ready is routed. With the mask off the transient showed in one run of three. The mask hid about the first 2
+    /// accelerometer samples (mask off: first sample 0.228 g; mask on: all in band).
+    ///
+    /// The accelerometer's own settling is not covered by that wait: see
+    /// [`Self::accel_fast_settling`].
     pub drdy_mask: bool,
     /// LPF2 fast-settling mode of the low-g accelerometer, active while exiting power-down
     /// (CTRL9 XL_FASTSETTL_MODE, p72).
+    ///
+    /// Measured on the MARV V2 board, 2026-11-11, with the narrow second-stage filter
+    /// ([`AccelLpf2Bandwidth::OdrDiv100`] at 240 Hz) and the mask on: without it the first
+    /// data-ready edge came at 68.6 ms with the output at 0.62 g and the output was within 10 % of
+    /// 1 g only at 170 ms; with it on the first sample was in band at 18 ms. With a narrow LPF2,
+    /// turn this on or discard samples until the output has settled.
     pub accel_fast_settling: bool,
     /// Data-ready pulsed or latched.
     pub data_ready_mode: DataReadyMode,
