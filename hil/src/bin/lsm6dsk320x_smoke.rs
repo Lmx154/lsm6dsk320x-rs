@@ -15,8 +15,8 @@ use embassy_rp::{Peripherals, bind_interrupts, dma};
 use embassy_time::{Delay, Duration, Instant, with_timeout};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use lsm6dsk320x::{
-    AccelFullScale, Config, DataReady, GyroFullScale, HighGConfig, HighGFullScale, HighGOdr, Odr,
-    blocking, reg,
+    AccelFullScale, Config, DataReady, GyroFullScale, HighGConfig, HighGFullScale, HighGOdr,
+    IntRouting, Odr, blocking, reg,
 };
 use panic_probe as _;
 
@@ -62,35 +62,23 @@ fn mag(v: [f32; 3]) -> f32 {
 }
 
 fn accel_config(odr: Odr) -> Config {
-    Config {
-        accel_fs: ACCEL_FS,
-        accel_odr: odr,
-        gyro_fs: GYRO_FS,
-        gyro_odr: odr,
-        high_g: None,
-        int1: DataReady {
-            accel: true,
-            gyro: false,
-            high_g: false,
-        },
-        int2: DataReady::NONE,
-    }
+    Config::new()
+        .with_accel_fs(ACCEL_FS)
+        .with_accel_odr(odr)
+        .with_gyro_fs(GYRO_FS)
+        .with_gyro_odr(odr)
+        .with_high_g(None)
+        .with_int1(IntRouting::new().with_data_ready(DataReady::new().with_accel(true)))
+        .with_int2(IntRouting::new())
 }
 
 fn high_g_config(odr: HighGOdr) -> Config {
-    Config {
-        high_g: Some(HighGConfig {
-            odr,
-            full_scale: HIGH_G_FS,
-        }),
-        int1: DataReady::NONE,
-        int2: DataReady {
-            accel: false,
-            gyro: false,
-            high_g: true,
-        },
-        ..accel_config(Odr::Hz960)
-    }
+    accel_config(Odr::Hz960)
+        .with_high_g(Some(
+            HighGConfig::new().with_odr(odr).with_full_scale(HIGH_G_FS),
+        ))
+        .with_int1(IntRouting::new())
+        .with_int2(IntRouting::new().with_data_ready(DataReady::new().with_high_g(true)))
 }
 
 /// What one timed window of reads, one per data-ready edge, saw.
