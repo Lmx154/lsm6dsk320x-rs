@@ -1,6 +1,6 @@
 # LSM6DSK320X device facts (MARV V2 Rev 1)
 
-Copied from the MARV V2 firmware repository's `docs/devices.md` and `docs/pinout.md`. Page numbers are PDF pages of the datasheet listed at the end. Items marked UNKNOWN or "unverified" have not been checked against the datasheet or on hardware. "Measured" means measured on this board.
+The device and board facts this driver was written against, taken from the MARV V2 firmware repository's `docs/devices.md` and `docs/pinout.md`. Page numbers are PDF pages of the datasheet listed at the end. "Measured" means measured on this board.
 
 ## LSM6DSK320X (STMicroelectronics, IMU with high-g channel on SPI1)
 
@@ -16,16 +16,21 @@ Pins: see "Pins and bus" below.
   reset value selects a reserved code, so FS_G must be written. Keep bit3 as the datasheet requires (p69).
 - CTRL8 0x17: bits 1:0 FS_XL (00 = +-2 g, 01 = +-4 g, 10 = +-8 g, 11 = +-16 g) (p71).
 - High-g channel: CTRL1_XL_HG 0x4E: bit7 XL_HG_REGOUT_EN, bits 5:3 ODR_XL_HG (011 = 480 Hz, 100 = 960 Hz),
-  bits 2:0 FS_XL_HG (000 = +-32 g ... 100 = +-320 g) (p91). Field positions: verify on p91 before use.
+  bits 2:0 FS_XL_HG (000 = +-32 g ... 100 = +-320 g) (p91; bit6 is HG_USR_OFF_ON_OUT).
+  The driver's constants in `src/reg.rs` use these positions.
   Table 21 (p33) allows the high-g channel with any low-g ODR in high-performance mode; lowest high-g ODR is 480 Hz.
 - Interrupt routing: INT1_CTRL 0x0D bit0 = low-g accel data-ready, bit1 = gyro data-ready. INT2_CTRL 0x0E same
   bits. CTRL7 0x16 bit7 = high-g data-ready on INT1, bit6 = on INT2 (p63, p64, p70).
-- CTRL4 0x13 bit1 DRDY_PULSED (verify bit position on p68): 1 = 65 us pulses, 0 = latched (default).
+- CTRL4 0x13 bit1 DRDY_PULSED (p68): 1 = data-ready pulses 65 us long, 0 = latched, returning to 0 only after the
+  higher part of the output register has been read. The device's reset default is 0 (latched). The driver's
+  `Config::new()` selects pulsed (`DataReadyMode::Pulsed`).
 - IF_CFG 0x03: bit4 H_LACTIVE (0 = active high), bit3 PP_OD (0 = push-pull), bit2 SIM (0 = 4-wire), bit0
   I2C_I3C_disable; not reset by software reset (p58, Table 31).
 - CTRL3 0x12: bit0 SW_RESET (self-clearing), bit7 BOOT (p67). Boot time is not in the datasheet; measured:
   SW_RESET self-clears in about 230 us.
-- STATUS_REG 0x1E: bit0 XLDA, bit1 GDA, bit2 TDA, bit3 XLHGDA (p77).
+- STATUS_REG 0x1E: bit0 XLDA, bit1 GDA, bit2 TDA, bit3 XLHGDA, bit4 GDA_EIS, bit5 OIS_DRDY,
+  bit7 TIMESTAMP_ENDCOUNT (alerts timestamp overflow within 5.6 ms) (p77).
+  The driver's `Status` decodes bits 0 to 3 only.
 - Outputs, little-endian 16-bit: temperature 0x20; gyro X 0x22, Y 0x24, Z 0x26; low-g accel X 0x28, Y 0x2A,
   Z 0x2C; high-g accel X 0x34, Y 0x36, Z 0x38 (p52-53, p78-84).
 - Sensitivity (p12): low-g mg/LSB +-2 g 0.061, +-4 g 0.122, +-8 g 0.244, +-16 g 0.488. High-g mg/LSB +-32 g
@@ -33,7 +38,10 @@ Pins: see "Pins and bus" below.
   +-1000 35, +-2000 70, +-4000 140.
 - Temperature: degC = raw/256 + 25 (p16). Gyro turn-on 40 ms, typical, not guaranteed (Table 4, p15); measured on the MARV V2 board, 2026-11-11: clean gyro samples from about 65 ms after the start. The driver waits 70 ms.
 - ODR accuracy in normal high-performance mode is not specified (the +-1 %/+-3 % figures on p13 are for
-  high-accuracy-ODR mode). Measured: the output rate runs 1.8 % below nominal (the ODR setting is not recorded).
+  high-accuracy-ODR mode). Measured on the MARV V2 board, 2026-11-11: at the 960 Hz setting the gyroscope output
+  rate was 942.66 Hz, 1.8 % below nominal, which the frequency-trim register (INTERNAL_FREQ_FINE) explains (see
+  the rustdoc of `Info::gyro_odr_mhz`). In the high-accuracy ODR sets the measured rates were 957.66, 999.998,
+  800.664 and 833.998 Hz; the trim does not apply there.
 - High-g zero-g offset: +-250 mg typical (Table 3, p12).
 
 ## Pins and bus (from pinout.md)

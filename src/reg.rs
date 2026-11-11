@@ -6,6 +6,8 @@
 //!
 //! A single-bit field is a mask (`1 << n`). A multi-bit field has a `_SHIFT` and a `_MASK`
 //! (already shifted). Codes of a field are named after the field.
+// A table of register addresses and bit masks named after the datasheet, each group carrying its
+// datasheet page; per-constant documentation would repeat the names.
 #![allow(missing_docs)]
 
 pub const FUNC_CFG_ACCESS: u8 = 0x01;

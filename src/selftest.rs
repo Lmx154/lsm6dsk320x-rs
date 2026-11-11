@@ -8,8 +8,8 @@
 //! published ST procedure in the family is the LSM6DSV16X example in ST's driver examples
 //! (`lsm6dsv16x_self_test.c`, BSD-3-Clause). It is used here as facts only; no code is copied.
 //! This module takes the SHAPE of that procedure for all three channels and takes every limit and
-//! every bit from the datasheet of THIS part (ST DS15060 Rev 1). The waits are parameters that the
-//! on-board suite is to confirm.
+//! every bit from the datasheet of THIS part (ST DS15060 Rev 1). The waits are parameters; the first
+//! runs on the real sensor are under "Measured" below.
 //!
 //! Per channel: the other channels are put in power-down and the filters and offsets of the
 //! channel are set to their reset state, so that nothing but the stimulus changes the output; the
@@ -29,10 +29,22 @@
 //! +-4000 dps only, so the lower of the two is used (finer steps, lower noise). The stimulus bits
 //! are ST_XL and ST_G in CTRL10 (Table 75, p74) and XL_HG_ST in CTRL2_XL_HG (Table 146, p91).
 //!
-//! The high-g procedure is by analogy with the family procedure; confirmed only by the on-board
-//! suite. The datasheet gives no self-test sequence, no settling time and no rate restriction for
+//! The high-g procedure is by analogy with the family procedure. The datasheet gives no self-test sequence, no settling time and no rate restriction for
 //! it; 480 Hz and +-32 g are the lowest rate and full scale of Tables 149 and 150 (p91), chosen for
 //! the lowest noise.
+//!
+//! # Measured
+//!
+//! First runs on the real sensor, measured on the MARV V2 board, 2026-11-10:
+//!
+//! - The stimulus settles within 10 ms (low-g accelerometer), 36 ms (gyroscope) and 5 ms (high-g
+//!   accelerometer), against the 100 ms the driver waits by default.
+//! - One full self-test takes 0.85 s.
+//! - The high-g procedure, which the manufacturer does not publish and which was built by analogy,
+//!   produced responses inside the datasheet's windows.
+//! - The positive and negative responses of the accelerometers are not mirror images of each
+//!   other (the pass window is on the absolute value).
+//! - Only the gyroscope test drops the interrupt routing while it runs.
 //!
 //! # Units
 //!

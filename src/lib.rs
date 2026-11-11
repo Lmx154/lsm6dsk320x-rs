@@ -9,7 +9,9 @@
 //! The built-in self-test is [`Lsm6dsk320x::self_test`] (see [`selftest`]). User offsets are written by
 //! [`Lsm6dsk320x::set_offsets`]. FIFO words are read by
 //! [`Lsm6dsk320x::fifo_read`] and decoded by the pure [`fifo_frames`]. Not covered at all: embedded
-//! functions (FSM, MLC, step counter, tap, free-fall), I2C/I3C, sensor hub, low-power modes.
+//! functions (FSM, MLC, step counter, tap, free-fall), I2C/I3C, sensor hub, low-power modes, the
+//! EIS gyroscope channel, the ODR-triggered mode, SFLP (sensor fusion), OIS, FIFO compression and
+//! the accelerometer high-pass filter.
 //! The register map, the [`Config`] family with its validation, the register write plan
 //! ([`Config::plan`]) and the pure helpers in [`calc`] are in place and need no bus.
 //!
@@ -18,32 +20,9 @@
 //! Conversions give acceleration in m/s², angular rate in rad/s and temperature in °C, as `f32`,
 //! from the raw counts and the full scale that was configured.
 //!
-//! # Async
+//! # Example
 //!
-//! ```ignore
-//! use lsm6dsk320x::{Config, Lsm6dsk320x};
-//!
-//! let mut imu = Lsm6dsk320x::new(spi_device);
-//! let config = Config::default();
-//! imu.init(&mut delay, &config).await?;
-//! loop {
-//!     int1.wait_for_rising_edge().await;
-//!     let raw = imu.read().await?;
-//!     let accel = raw.accel.accel_ms2(config.accel_fs);
-//!     let gyro = raw.gyro.gyro_rads(config.gyro_fs);
-//! }
-//! ```
-//!
-//! # Blocking
-//!
-//! ```ignore
-//! use lsm6dsk320x::{blocking, Config};
-//!
-//! let mut imu = blocking::Lsm6dsk320x::new(spi_device);
-//! let config = Config::default();
-//! imu.init(&mut delay, &config)?;
-//! let raw = imu.read()?;
-//! ```
+//! See `README.md`, whose example is compiled by `cargo test`.
 #![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
