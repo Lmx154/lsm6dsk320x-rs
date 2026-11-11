@@ -636,3 +636,7 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
         })
     }
 }
+
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+pub struct ReadmeDoctests;
