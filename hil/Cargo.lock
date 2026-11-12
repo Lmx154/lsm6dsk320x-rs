@@ -867,6 +867,7 @@ dependencies = [
  "lsm6dsk320x",
  "panic-probe",
  "semihosting",
+ "smart-leds",
 ]
 
 [[package]]
