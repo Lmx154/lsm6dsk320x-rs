@@ -115,7 +115,7 @@ Present in the driver but not exercised by any program in `hil/src/bin` (checked
 
 - The high-g wake-up and shock generator (`Config::high_g_events`, `HighGEvents`, `HighGWakeUpMode`) and routing them to a pin (`IntRouting::high_g_wake_up`, `high_g_shock`). `interrupt_status` is called only with the generator off.
 - FIFO modes other than `Continuous` (the triggered modes, `Fifo`, `ContinuousWtmToFull`), `FifoConfig::stop_on_wtm`, and routing the FIFO full or overrun flag (`IntRouting::fifo_full`, `fifo_overrun`) or the timestamp overflow (`IntRouting::timestamp_overflow`) to a pin.
-- SPI mode 3 and any clock other than 8 MHz: every program in `hil/src/bin` sets `SPI_HZ` to 8 MHz and none selects a mode. The mode 3 and higher-clock figures below were not produced by a program in that folder.
+- Bus settings other than these two: `lsm6dsk320x_soak`, `lsm6dsk320x_dual` and `lsm6dsk320x_drdy_lead` run SPI mode 3 at 9.375 MHz; the other programs run mode 0 at 7.5 MHz (`SPI_HZ` 8 MHz). The clock-sweep figures for `read()` below were not produced by a program in `hil/src/bin`.
 - Full scales that no program names (grep of `hil/src/bin`): gyroscope +-1000, +-2000 (the `Config::new` default) and +-4000 dps, low-g +-8 g (the default) and +-16 g. The programs name only G2, G4, Dps250 and Dps500 for those; `lsm6dsk320x_dual` runs all five high-g full scales and all five high-g rates.
 
 ## Measured on the MARV V2 Rev 1 board
@@ -130,6 +130,11 @@ RP2354B at 150 MHz, embassy-rp 0.10, 2026-11-11. These are observations on one u
 - Reading on every data-ready edge at 7.68 kHz for 2 s, from an interrupt executor and from the second core, while a thread-mode task spun: no edge missed, no read failed.
 - High-accuracy ODR sets (960 / 1000 / 800 / 833): 957.66, 999.998, 800.664 and 833.998 Hz. The normal mode at the 960 Hz setting ran at 942.66 Hz on this unit (the frequency trim explains it).
 - `lsm6dsk320x_dual` (low-g, gyroscope and high-g on together, 2026-11-11): the high-g channel at full scales 32 / 64 / 128 / 256 / 320 g gives the same vector within 0.15 %. Against the low-g vector at rest the high-g one differs by about 0.05 / -0.15 / 0.30 g on X / Y / Z, the same at every full scale (the datasheet gives only a typical high-g zero-g offset of +-250 mg, Table 3, p12): the application has to calibrate it out with the high-g offset registers (`set_offsets`). High-g rates 480 / 960 / 1920 / 3840 / 7680 Hz were measured against the low-g data-ready rate. In the high-accuracy ODR mode the high-g rate and the FIFO words per second follow the selected ODR set like the low-g rate: in all four sets and at all five high-g settings, `Info::high_g_odr_mhz` and `fifo_words_per_second` are within 0.5 % and 1 % of the measurement (low-g and gyroscope batched at 960 Hz; other batch rates in that mode are by analogy, not measured).
+- `lsm6dsk320x_soak`, the one-time 30-minute run (2026-11-11, exit 0, log `lsm6dsk320x_soak-20261111-192936.log`), with the low-g accelerometer, the gyroscope and the high-g accelerometer on in every phase, SPI mode 3 at 9.375 MHz, a CPU spinner and a DMA copy running, the board at rest. Ten minutes each:
+  - one `read_all()` per data-ready edge at 7.68 kHz, the way firmware reads: 4 524 084 reads, 0 edges missed, 0 lost, 0 bus errors, 2 reads that returned less than 25 us before the next edge; a read took 36.8 us on average and 55.1 us at worst. This phase proves delivery at the top rate; it does not compare data;
+  - pairs of `read_all()` at 3.84 kHz that must be byte-identical on the gyroscope, low-g and high-g bytes: 2 262 056 pairs, all counted, 0 mismatches, 0 missed, 0 lost;
+  - the FIFO at 960 Hz with gyroscope, low-g and high-g words: 1 802 612 words, 565 525 of each channel, exactly 8 of each between consecutive timestamp words in all 70 690 intervals, 0 malformed words, 0 overruns.
+  `verify()` passed every minute. Pairs of `read_all()` do not fit at 7.68 kHz (about 81 us for a pair, plus the 25 us margin, in a 132.6 us period), which is why the bit-exact check runs at half the rate. A build with injected faults fails for exactly the injected reasons.
 - Also on this board (dates in the rustdoc and `docs/device.md`): `SW_RESET` clears in about 230 us; the gyroscope is clean from about 65 ms after start; the FIFO held 256 words (2026-11-10).
 
 ## Tests
@@ -148,6 +153,8 @@ On the board, through a debug probe on the SWD header (the script builds, flashe
 | `lsm6dsk320x_cancel` | cancelled `read()` calls followed by `recover()`: wrong reads after a cancel, with and without `recover()` |
 | `lsm6dsk320x_modes` | gyroscope LPF1, low-g LPF2, `drdy_mask`, fast settling, the four high-accuracy ODR sets, latched data-ready, pin polarity, output type and drive, status flags |
 | `lsm6dsk320x_dual` | the low-g, gyroscope and high-g channels on together: every high-g full scale at rest, every high-g rate, the high-accuracy ODR sets with the high-g channel (rates and FIFO), `read_all` timing |
+| `lsm6dsk320x_drdy_lead` | a measurement, not a pass/fail test: when each output register changes relative to the data-ready edge (see "Rules for correct use") |
+| `lsm6dsk320x_soak` | the long data-integrity run with all three channels on: single reads at 7.68 kHz, double reads at 3.84 kHz, the FIFO with high-g words; length set at build time, `SOAK_SECONDS=1800 tools/run.sh lsm6dsk320x_soak 2100` for the 30-minute run; a bench test, never part of start-up |
 
 ## Features, layout, licence
 
