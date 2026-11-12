@@ -304,6 +304,23 @@ impl HighGOdr {
             Self::Hz7680 => 7_680_000,
         }
     }
+
+    /// The rate in millihertz in the high-accuracy ODR mode with the ODR set `set`: the table
+    /// rate (Table 22, p34) of the standard rate of the same name, measured to follow the set on
+    /// the MARV V2 board, 2026-11-11 (`hil/logs/lsm6dsk320x_dual-20261111-184219.log`).
+    pub(crate) const fn haodr_mhz(self, set: HaodrSet) -> u32 {
+        let odr = match self {
+            Self::Hz480 => Odr::Hz480,
+            Self::Hz960 => Odr::Hz960,
+            Self::Hz1920 => Odr::Hz1920,
+            Self::Hz3840 => Odr::Hz3840,
+            Self::Hz7680 => Odr::Hz7680,
+        };
+        match odr.haodr_mhz(set) {
+            Some(mhz) => mhz,
+            None => self.nominal_mhz(),
+        }
+    }
 }
 
 /// High-g channel settings. `Config::high_g` is `None` to leave the channel off.
@@ -794,6 +811,30 @@ impl BatchRate {
             Self::Hz1920 => 1_920_000,
             Self::Hz3840 => 3_840_000,
             Self::Hz7680 => 7_680_000,
+        }
+    }
+
+    /// The rate in millihertz in the high-accuracy ODR mode with the ODR set `set`: the table
+    /// rate (Table 22, p34) of the standard rate of the same name. Measured at 960 Hz only
+    /// (`hil/logs/lsm6dsk320x_dual-20261111-184219.log`); the other rates follow the same table
+    /// by analogy. 1.875 Hz and 7.5 Hz have no table rate and stay nominal.
+    pub(crate) const fn haodr_mhz(self, set: HaodrSet) -> u32 {
+        let odr = match self {
+            Self::Off | Self::Hz1_875 | Self::Hz7_5 => return self.nominal_mhz(),
+            Self::Hz15 => Odr::Hz15,
+            Self::Hz30 => Odr::Hz30,
+            Self::Hz60 => Odr::Hz60,
+            Self::Hz120 => Odr::Hz120,
+            Self::Hz240 => Odr::Hz240,
+            Self::Hz480 => Odr::Hz480,
+            Self::Hz960 => Odr::Hz960,
+            Self::Hz1920 => Odr::Hz1920,
+            Self::Hz3840 => Odr::Hz3840,
+            Self::Hz7680 => Odr::Hz7680,
+        };
+        match odr.haodr_mhz(set) {
+            Some(mhz) => mhz,
+            None => self.nominal_mhz(),
         }
     }
 }

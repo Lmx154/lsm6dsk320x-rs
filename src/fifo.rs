@@ -30,7 +30,7 @@
 //! settled: the layout of the configuration-change word.
 
 use crate::calc;
-use crate::config::{Config, FifoMode, TempBatchRate, TimestampBatch};
+use crate::config::{Config, FifoMode, OperatingMode, TempBatchRate, TimestampBatch};
 use crate::reg;
 use crate::sample::RawAxes;
 
@@ -252,8 +252,12 @@ pub const fn timestamp_delta_ticks(earlier: u32, later: u32) -> u32 {
 /// The expected FIFO word rate for `config`, in millihertz (words per second times 1000), rounded
 /// up. `freq_fine` is the INTERNAL_FREQ_FINE value (9.54, p92) that scales all rates; use 0 for
 /// the nominal rates. In the high-accuracy ODR mode the trim is not applied (the datasheet gives
-/// the rate there as the table rate, +-1 % with the gyroscope on, 6.1.4 and Table 3, p13, p34).
-/// The configuration is not validated.
+/// the rate there as the table rate, +-1 % with the gyroscope on, 6.1.4 and Table 3, p13, p34) and
+/// the batch rates and the high-g ODR are the table rates of the selected set (Table 22, p34):
+/// measured on the MARV V2 board, 2026-11-11 (`lsm6dsk320x_dual`), with gyroscope and low-g
+/// batched at 960 Hz and the high-g channel at each of its five settings, in all four sets, the
+/// FIFO delivered the figure returned here within 1 %. Other batch rates in that mode follow the
+/// same table by analogy and were not measured. The configuration is not validated.
 ///
 /// Counted: the gyroscope and low-g batch rates (Table 40, p60), the high-g channel at its ODR when
 /// it is batched (COUNTER_BDR_REG1 has no rate field, p62; the rate is taken as the high-g ODR),
@@ -264,12 +268,25 @@ pub const fn fifo_words_per_second_mhz(config: &Config, freq_fine: i8) -> u32 {
     if matches!(config.fifo.mode, FifoMode::Bypass) {
         return 0;
     }
-    let gyro = config.fifo.gyro.nominal_mhz();
-    let accel = config.fifo.accel.nominal_mhz();
-    let high_g = match (config.fifo.high_g, config.high_g) {
-        (true, Some(h)) => h.odr.nominal_mhz(),
-        _ => 0,
+    let (gyro, accel, high_g_mhz) = match config.mode {
+        OperatingMode::HighAccuracyOdr(set) => (
+            config.fifo.gyro.haodr_mhz(set),
+            config.fifo.accel.haodr_mhz(set),
+            match config.high_g {
+                Some(h) => h.odr.haodr_mhz(set),
+                None => 0,
+            },
+        ),
+        _ => (
+            config.fifo.gyro.nominal_mhz(),
+            config.fifo.accel.nominal_mhz(),
+            match config.high_g {
+                Some(h) => h.odr.nominal_mhz(),
+                None => 0,
+            },
+        ),
     };
+    let high_g = if config.fifo.high_g { high_g_mhz } else { 0 };
     let temperature = match config.fifo.temperature {
         TempBatchRate::Off => 0,
         TempBatchRate::Hz1_875 => 1_875,
@@ -530,6 +547,48 @@ mod tests {
                 .with_gyro(BatchRate::Hz960)
                 .with_accel(BatchRate::Hz960),
         )
+    }
+
+    // Measured on the MARV V2 board, 2026-11-11 (hil/logs/lsm6dsk320x_dual-20261111-184219.log,
+    // section D3): gyroscope and low-g batched at 960 and the high-g channel batched, the FIFO
+    // words per second for each ODR set and high-g setting. The reported figure is the sum of the
+    // three table rates of the set (Table 22, p34) and agrees with the measurement within 1 %.
+    #[test]
+    fn words_per_second_follows_the_haodr_set() {
+        use crate::{HaodrSet, OperatingMode};
+        // (set, [measured words/s for the high-g settings 480, 960, 1920, 3840, 7680])
+        let measured = [
+            (HaodrSet::Base960, [2394.0, 2873.6, 3831.1, 5746.7, 9576.5]),
+            (HaodrSet::Base1000, [2498.0, 2998.5, 3998.3, 5997.1, 9999.1]),
+            (HaodrSet::Base800, [2000.5, 2401.8, 3203.9, 4803.5, 8008.2]),
+            (HaodrSet::Base833, [2084.8, 2502.3, 3337.0, 5004.3, 8340.7]),
+        ];
+        let rates = [
+            HighGOdr::Hz480,
+            HighGOdr::Hz960,
+            HighGOdr::Hz1920,
+            HighGOdr::Hz3840,
+            HighGOdr::Hz7680,
+        ];
+        for (set, words) in measured {
+            for (hodr, want) in rates.into_iter().zip(words) {
+                let c = base()
+                    .with_mode(OperatingMode::HighAccuracyOdr(set))
+                    .with_high_g(Some(HighGConfig::new().with_odr(hodr)))
+                    .with_fifo(base().fifo.with_high_g(true));
+                let got = fifo_words_per_second_mhz(&c, -3) as f32 / 1000.0;
+                assert!(
+                    (got / want - 1.0).abs() <= 0.01,
+                    "{set:?} {hodr:?}: reported {got}, measured {want}"
+                );
+            }
+        }
+        // The sum for set 800 at high-g 1920: 800 + 800 + 1600.
+        let c = base()
+            .with_mode(OperatingMode::HighAccuracyOdr(HaodrSet::Base800))
+            .with_high_g(Some(HighGConfig::new().with_odr(HighGOdr::Hz1920)))
+            .with_fifo(base().fifo.with_high_g(true));
+        assert_eq!(fifo_words_per_second_mhz(&c, 0), 3_200_000);
     }
 
     // Hand-computed: words per second = sum of the batch rates (Tables 40 and 42, p60-61).

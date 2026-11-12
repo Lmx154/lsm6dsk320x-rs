@@ -167,9 +167,10 @@ pub struct Info {
     /// [`gyro_odr_mhz`](Self::gyro_odr_mhz).
     pub accel_odr_mhz: u32,
     /// Output rate of the high-g accelerometer in millihertz, 0 when it is off. In the
-    /// high-accuracy ODR mode it is the nominal rate of the high-g setting with no trim (the
-    /// datasheet applies the mode to the high-g accelerometers, 6.1.4, p34, but gives no ODR set
-    /// table for them; not measured).
+    /// high-accuracy ODR mode it is the table rate of the selected set for the standard rate of
+    /// the same name (Table 22, p34), with no trim: measured on the MARV V2 board, 2026-11-11
+    /// (`lsm6dsk320x_dual`), the high-g rate follows the set like the low-g rate, for the settings
+    /// 480, 960, 1920, 3840 and 7680 Hz in all four sets, within 0.5 % of this field.
     pub high_g_odr_mhz: u32,
     /// Expected FIFO words per second, rounded up (see [`fifo::fifo_words_per_second`]); with no
     /// clock trim in the high-accuracy ODR mode.
@@ -369,7 +370,7 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
             gyro_odr_mhz: reported_odr_mhz(config, config.gyro_odr, freq_fine),
             accel_odr_mhz: reported_odr_mhz(config, config.accel_odr, freq_fine),
             high_g_odr_mhz: match (config.high_g, config.mode) {
-                (Some(h), OperatingMode::HighAccuracyOdr(_)) => h.odr.nominal_mhz(),
+                (Some(h), OperatingMode::HighAccuracyOdr(set)) => h.odr.haodr_mhz(set),
                 (Some(h), _) => calc::scale_rate_mhz(h.odr.nominal_mhz(), freq_fine),
                 (None, _) => 0,
             },

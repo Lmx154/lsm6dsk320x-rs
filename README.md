@@ -115,8 +115,7 @@ Present in the driver but not exercised by any program in `hil/src/bin` (checked
 - The high-g wake-up and shock generator (`Config::high_g_events`, `HighGEvents`, `HighGWakeUpMode`) and routing them to a pin (`IntRouting::high_g_wake_up`, `high_g_shock`). `interrupt_status` is called only with the generator off.
 - FIFO modes other than `Continuous` (the triggered modes, `Fifo`, `ContinuousWtmToFull`), `FifoConfig::stop_on_wtm`, and routing the FIFO full or overrun flag (`IntRouting::fifo_full`, `fifo_overrun`) or the timestamp overflow (`IntRouting::timestamp_overflow`) to a pin.
 - SPI mode 3 and any clock other than 8 MHz: every program in `hil/src/bin` sets `SPI_HZ` to 8 MHz and none selects a mode. The mode 3 and higher-clock figures below were not produced by a program in that folder.
-- Full scales that no program names (grep of `hil/src/bin`): gyroscope +-1000, +-2000 (the `Config::new` default) and +-4000 dps, low-g +-8 g (the default) and +-16 g, high-g +-64, +-128 and +-256 g. The programs name only G2, G4, Dps250, Dps500 and the high-g G32 and G320.
-- In the high-accuracy ODR mode: the high-g channel's rate and the FIFO words-per-second figure (the commit that added the mode lists both as untested).
+- Full scales that no program names (grep of `hil/src/bin`): gyroscope +-1000, +-2000 (the `Config::new` default) and +-4000 dps, low-g +-8 g (the default) and +-16 g. The programs name only G2, G4, Dps250 and Dps500 for those; `lsm6dsk320x_dual` runs all five high-g full scales and all five high-g rates.
 
 ## Measured on the MARV V2 Rev 1 board
 
@@ -129,11 +128,12 @@ RP2354B at 150 MHz, embassy-rp 0.10, 2026-11-11. These are observations on one u
 - Driver CPU time on top of the bare HAL for the same transaction: 0.84 us for `read()`, 0.87 us for `read_all()`, 1.2 us for a 28-word FIFO read (medians, identical over ten runs of one build). In other builds these moved by several microseconds with code placement in flash.
 - Reading on every data-ready edge at 7.68 kHz for 2 s, from an interrupt executor and from the second core, while a thread-mode task spun: no edge missed, no read failed.
 - High-accuracy ODR sets (960 / 1000 / 800 / 833): 957.66, 999.998, 800.664 and 833.998 Hz. The normal mode at the 960 Hz setting ran at 942.66 Hz on this unit (the frequency trim explains it).
+- `lsm6dsk320x_dual` (low-g, gyroscope and high-g on together, 2026-11-11): the high-g channel at full scales 32 / 64 / 128 / 256 / 320 g gives the same vector within 0.15 %. Against the low-g vector at rest the high-g one differs by about 0.05 / -0.15 / 0.30 g on X / Y / Z, the same at every full scale (the datasheet gives only a typical high-g zero-g offset of +-250 mg, Table 3, p12): the application has to calibrate it out with the high-g offset registers (`set_offsets`). High-g rates 480 / 960 / 1920 / 3840 / 7680 Hz were measured against the low-g data-ready rate. In the high-accuracy ODR mode the high-g rate and the FIFO words per second follow the selected ODR set like the low-g rate: in all four sets and at all five high-g settings, `Info::high_g_odr_mhz` and `fifo_words_per_second` are within 0.5 % and 1 % of the measurement (low-g and gyroscope batched at 960 Hz; other batch rates in that mode are by analogy, not measured).
 - Also on this board (dates in the rustdoc and `docs/device.md`): `SW_RESET` clears in about 230 us; the gyroscope is clean from about 65 ms after start; the FIFO held 256 words (2026-11-10).
 
 ## Tests
 
-Host tests (no hardware, a simulated bus): `cargo test --locked`. Observed: 167 unit tests pass, plus 1 README doctest (compiled, not run).
+Host tests (no hardware, a simulated bus): `cargo test --locked`. Observed: 169 unit tests pass, plus 1 README doctest (compiled, not run).
 
 On the board, through a debug probe on the SWD header (the script builds, flashes, runs and takes a lock so runs never overlap): `tools/run.sh <name>`, for example `tools/run.sh lsm6dsk320x_smoke`. The exit status is 0 when every check passed; logs are kept under `hil/logs/`. The programs use SPI1 (SCK GPIO10, MOSI GPIO11, MISO GPIO8, hardware CSn GPIO9 with pull-up R51), INT1 on GPIO7 and INT2 on GPIO6; the smoke program runs at 8 MHz.
 
@@ -146,6 +146,7 @@ On the board, through a debug probe on the SWD header (the script builds, flashe
 | `lsm6dsk320x_selftest` | `self_test` with the defaults (five runs), negative stimulus, each channel alone, stimulus settling, margins to the windows, shortened settings, nothing left behind |
 | `lsm6dsk320x_cancel` | cancelled `read()` calls followed by `recover()`: wrong reads after a cancel, with and without `recover()` |
 | `lsm6dsk320x_modes` | gyroscope LPF1, low-g LPF2, `drdy_mask`, fast settling, the four high-accuracy ODR sets, latched data-ready, pin polarity, output type and drive, status flags |
+| `lsm6dsk320x_dual` | the low-g, gyroscope and high-g channels on together: every high-g full scale at rest, every high-g rate, the high-accuracy ODR sets with the high-g channel (rates and FIFO), `read_all` timing |
 
 ## Features, layout, licence
 

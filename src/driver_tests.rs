@@ -198,6 +198,62 @@ fn init_reports_the_table_rate_without_trim_in_haodr_mode() {
     }
 }
 
+/// Measured on the MARV V2 board, 2026-11-11 (`hil/logs/lsm6dsk320x_dual-20261111-184219.log`,
+/// section D3): in the high-accuracy ODR mode the high-g data-ready rate follows the ODR set like
+/// the low-g one (INT2 / INT1 = high-g setting / 960 in every set). `Info` reports the table rate
+/// of the set (Table 22, p34), within 0.5 % of each measured rate.
+#[test]
+fn init_reports_the_high_g_rate_of_the_haodr_set() {
+    // (set, measured Hz for the high-g settings 480, 960, 1920, 3840, 7680)
+    let measured = [
+        (
+            crate::HaodrSet::Base960,
+            [479.0, 957.5, 1915.0, 3830.0, 7660.0],
+        ),
+        (
+            crate::HaodrSet::Base1000,
+            [500.0, 999.5, 1999.0, 3999.0, 7999.0],
+        ),
+        (
+            crate::HaodrSet::Base800,
+            [400.0, 800.5, 1602.0, 3203.0, 6406.0],
+        ),
+        (
+            crate::HaodrSet::Base833,
+            [417.0, 834.0, 1668.0, 3335.0, 6671.0],
+        ),
+    ];
+    let rates = [
+        crate::HighGOdr::Hz480,
+        crate::HighGOdr::Hz960,
+        crate::HighGOdr::Hz1920,
+        crate::HighGOdr::Hz3840,
+        crate::HighGOdr::Hz7680,
+    ];
+    for (set, hz) in measured {
+        for (odr, want) in rates.into_iter().zip(hz) {
+            let (_shared, mut imu, mut delay) = rig();
+            let config = Config::new()
+                .with_mode(crate::OperatingMode::HighAccuracyOdr(set))
+                .with_high_g(Some(crate::HighGConfig::new().with_odr(odr)));
+            let info = run(imu.init(&mut delay, &config)).unwrap();
+            let got = info.high_g_odr_mhz as f32 / 1000.0;
+            assert!(
+                (got / want - 1.0).abs() <= 0.005,
+                "{set:?} {odr:?}: reported {got} Hz, measured {want} Hz"
+            );
+        }
+    }
+    let (_shared, mut imu, mut delay) = rig();
+    let config = Config::new()
+        .with_mode(crate::OperatingMode::HighAccuracyOdr(
+            crate::HaodrSet::Base833,
+        ))
+        .with_high_g(Some(crate::HighGConfig::new()));
+    let info = run(imu.init(&mut delay, &config)).unwrap();
+    assert_eq!(info.high_g_odr_mhz, 833_000);
+}
+
 /// With the low-g accelerometer off, only the gyroscope has a rate; the off sensor reports 0.
 #[test]
 fn init_reports_zero_for_an_off_sensor_in_haodr_mode() {
