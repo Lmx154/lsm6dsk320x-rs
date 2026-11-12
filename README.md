@@ -133,7 +133,7 @@ RP2354B at 150 MHz, embassy-rp 0.10, 2026-11-11. These are observations on one u
 
 ## Tests
 
-Host tests (no hardware, a simulated bus): `cargo test --locked`. Observed: 166 unit tests pass, plus 1 README doctest (compiled, not run).
+Host tests (no hardware, a simulated bus): `cargo test --locked`. Observed: 167 unit tests pass, plus 1 README doctest (compiled, not run).
 
 On the board, through a debug probe on the SWD header (the script builds, flashes, runs and takes a lock so runs never overlap): `tools/run.sh <name>`, for example `tools/run.sh lsm6dsk320x_smoke`. The exit status is 0 when every check passed; logs are kept under `hil/logs/`. The programs use SPI1 (SCK GPIO10, MOSI GPIO11, MISO GPIO8, hardware CSn GPIO9 with pull-up R51), INT1 on GPIO7 and INT2 on GPIO6; the smoke program runs at 8 MHz.
 

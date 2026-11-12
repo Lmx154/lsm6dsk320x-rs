@@ -58,7 +58,9 @@ use crate::calc::{
     self, SELF_TEST_GYRO_250_DPS_MDPS, SELF_TEST_HIGH_G_MG, SELF_TEST_LOW_G_MG, SelfTestRange,
     SelfTestSign,
 };
-use crate::config::{AccelFullScale, Channel, GyroFullScale, HighGFullScale, HighGOdr, Odr};
+use crate::config::{
+    AccelFullScale, Channel, ConfigError, GyroFullScale, HighGFullScale, HighGOdr, Odr,
+};
 use crate::plan::{Apply, Step};
 use crate::sample::RawAxes;
 use crate::{Error, Lsm6dsk320x, reg};
@@ -214,47 +216,53 @@ impl SelfTestConfig {
     }
 
     /// The register sequence that tests `channel` with these settings.
-    pub fn sequence(&self, channel: Channel) -> SelfTestSequence {
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::PlanOverflow`] if the steps do not fit [`MAX_STEPS`]. Not reachable today:
+    /// the low-g and gyroscope lists have exactly 12 steps and the high-g list 10; reported so that
+    /// a step is never dropped silently.
+    pub fn sequence(&self, channel: Channel) -> Result<SelfTestSequence, ConfigError> {
         let settle = self.settle_ms as u32 * 1000;
         let sign = self.stimulus.sign();
         let mut s = SelfTestSequence::empty(channel);
-        s.write(reg::CTRL1_XL_HG, 0);
+        s.write(reg::CTRL1_XL_HG, 0)?;
         match channel {
             Channel::LowG => {
-                s.write(reg::CTRL2, 0);
-                s.write(reg::CTRL1, 0);
-                s.write(reg::CTRL9, 0);
-                s.write(reg::CTRL8, AccelFullScale::G4.code());
-                s.write(reg::CTRL1, LOW_G_ODR.code());
+                s.write(reg::CTRL2, 0)?;
+                s.write(reg::CTRL1, 0)?;
+                s.write(reg::CTRL9, 0)?;
+                s.write(reg::CTRL8, AccelFullScale::G4.code())?;
+                s.write(reg::CTRL1, LOW_G_ODR.code())?;
             }
             Channel::Gyro => {
-                s.write(reg::CTRL1, 0);
-                s.write(reg::CTRL2, 0);
-                s.write(reg::CTRL7, 0);
+                s.write(reg::CTRL1, 0)?;
+                s.write(reg::CTRL2, 0)?;
+                s.write(reg::CTRL7, 0)?;
                 s.write(
                     reg::CTRL6,
                     reg::CTRL6_MUST_BE_ONE | GyroFullScale::Dps250.code(),
-                );
-                s.write(reg::CTRL2, GYRO_ODR.code());
+                )?;
+                s.write(reg::CTRL2, GYRO_ODR.code())?;
             }
             Channel::HighG => {
-                s.write(reg::CTRL1, 0);
-                s.write(reg::CTRL2, 0);
+                s.write(reg::CTRL1, 0)?;
+                s.write(reg::CTRL2, 0)?;
                 s.write(
                     reg::CTRL1_XL_HG,
                     reg::CTRL1_XL_HG_REGOUT_EN
                         | (HIGH_G_ODR.code() << reg::CTRL1_XL_HG_ODR_SHIFT)
                         | HighGFullScale::G32.code(),
-                );
+                )?;
             }
         }
-        s.push(SelfTestStep::Bus(Step::DelayUs(settle)));
-        s.push(SelfTestStep::Collect(Phase::Baseline));
-        s.stimulus(sign);
-        s.push(SelfTestStep::Bus(Step::DelayUs(settle)));
-        s.push(SelfTestStep::Collect(Phase::Stimulated));
-        s.stimulus(SelfTestSign::Off);
-        s
+        s.push(SelfTestStep::Bus(Step::DelayUs(settle)))?;
+        s.push(SelfTestStep::Collect(Phase::Baseline))?;
+        s.stimulus(sign)?;
+        s.push(SelfTestStep::Bus(Step::DelayUs(settle)))?;
+        s.push(SelfTestStep::Collect(Phase::Stimulated))?;
+        s.stimulus(SelfTestSign::Off)?;
+        Ok(s)
     }
 }
 
@@ -304,24 +312,27 @@ impl SelfTestSequence {
         }
     }
 
-    /// The sequences are built to fit; a step past the capacity is dropped and the length tests
-    /// catch it.
-    fn push(&mut self, step: SelfTestStep) {
-        if let Some(slot) = self.steps.get_mut(self.len) {
-            *slot = step;
-            self.len += 1;
-        }
+    /// Appends a step. [`ConfigError::PlanOverflow`] when the list already holds [`MAX_STEPS`]
+    /// steps; the step is then not added and the list is unchanged.
+    fn push(&mut self, step: SelfTestStep) -> Result<(), ConfigError> {
+        let slot = self
+            .steps
+            .get_mut(self.len)
+            .ok_or(ConfigError::PlanOverflow)?;
+        *slot = step;
+        self.len += 1;
+        Ok(())
     }
 
-    fn write(&mut self, reg: u8, value: u8) {
-        self.push(SelfTestStep::Bus(Step::Write { reg, value }));
+    fn write(&mut self, reg: u8, value: u8) -> Result<(), ConfigError> {
+        self.push(SelfTestStep::Bus(Step::Write { reg, value }))
     }
 
     /// Sets the stimulus of the channel: ST_XL or ST_G in CTRL10 (read-modify-write, the other
     /// fields stay), XL_HG_ST in CTRL2_XL_HG (a write; the rest of that register is re-applied
     /// afterwards).
-    fn stimulus(&mut self, sign: SelfTestSign) {
-        self.push(SelfTestStep::Bus(stimulus_step(self.channel, sign)));
+    fn stimulus(&mut self, sign: SelfTestSign) -> Result<(), ConfigError> {
+        self.push(SelfTestStep::Bus(stimulus_step(self.channel, sign)))
     }
 
     /// The channel tested.
@@ -500,7 +511,9 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
     ///
     /// [`Error::NotConfigured`] while the driver is not configured and [`Error::InvalidSelfTest`]
     /// for a [`SelfTestConfig`] with no channel or 0 samples, both before any bus access and with
-    /// the driver's state unchanged. From there on the driver is not configured until the call
+    /// the driver's state unchanged; so is [`Error::InvalidConfig`] holding
+    /// [`ConfigError::PlanOverflow`] if a self-test step list does not fit [`MAX_STEPS`] (not
+    /// reachable today, see [`SelfTestConfig::sequence`]). From there on the driver is not configured until the call
     /// completes: it is cleared before the first await, and set again only after the stimulus is
     /// off, the applied [`Config`](crate::Config) is re-applied with the in-place plan and the
     /// applied offsets are written back. The call takes about one second with the defaults, and
@@ -530,11 +543,17 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
             .config
             .plan(Apply::InPlace)
             .map_err(Error::InvalidConfig)?;
+        let mut sequences = [None; 3];
+        for (slot, channel) in sequences.iter_mut().zip(test.channels()) {
+            if let Some(channel) = channel {
+                *slot = Some(test.sequence(channel).map_err(Error::InvalidConfig)?);
+            }
+        }
         self.applied = None;
 
         let mut report = SelfTestReport::default();
-        for channel in test.channels().into_iter().flatten() {
-            let sequence = test.sequence(channel);
+        for sequence in sequences.into_iter().flatten() {
+            let channel = sequence.channel();
             match self.run_sequence(delay, test, &sequence).await {
                 Ok(result) => match channel {
                     Channel::LowG => report.low_g = Some(result),
@@ -636,5 +655,39 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
         let mut b = [0u8; 6];
         self.read_registers(first, &mut b).await?;
         Ok(RawAxes::from_bytes(&b))
+    }
+}
+
+#[cfg(test)]
+mod overflow_tests {
+    use super::*;
+    use crate::config::ConfigError;
+
+    #[test]
+    fn push_past_capacity_is_an_error_and_keeps_the_steps() {
+        let mut s = SelfTestSequence::empty(Channel::LowG);
+        for i in 0..MAX_STEPS {
+            assert_eq!(s.write(reg::CTRL1, i as u8), Ok(()));
+        }
+        assert_eq!(s.steps().len(), MAX_STEPS);
+        assert_eq!(
+            s.push(SelfTestStep::Collect(Phase::Baseline)),
+            Err(ConfigError::PlanOverflow)
+        );
+        assert_eq!(s.write(reg::CTRL2, 0xFF), Err(ConfigError::PlanOverflow));
+        assert_eq!(
+            s.stimulus(SelfTestSign::Off),
+            Err(ConfigError::PlanOverflow)
+        );
+        assert_eq!(s.steps().len(), MAX_STEPS);
+        for (i, step) in s.steps().iter().enumerate() {
+            assert_eq!(
+                *step,
+                SelfTestStep::Bus(Step::Write {
+                    reg: reg::CTRL1,
+                    value: i as u8
+                })
+            );
+        }
     }
 }

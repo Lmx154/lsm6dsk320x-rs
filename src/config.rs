@@ -1366,8 +1366,10 @@ pub enum ConfigError {
         /// The channel group, `LowG` or `HighG`.
         channel: Channel,
     },
-    /// The register write plan did not fit its fixed capacity ([`crate::plan::MAX_STEPS`]). Not
-    /// reachable from any [`Config`] today; reported so that a step is never dropped silently.
+    /// A step list did not fit its fixed capacity: the register write plan
+    /// ([`crate::plan::MAX_STEPS`]) or a self-test sequence ([`crate::selftest::MAX_STEPS`]). Not
+    /// reachable from any [`Config`] or [`SelfTestConfig`](crate::SelfTestConfig) today; reported so
+    /// that a step is never dropped silently.
     PlanOverflow,
 }
 

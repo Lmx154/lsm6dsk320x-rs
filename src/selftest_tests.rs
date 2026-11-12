@@ -97,7 +97,7 @@ fn sequences_low_g_gyro_high_g_as_step_lists() {
     let t = SelfTestConfig::new();
     // Low-g: others off, filters and offsets off (CTRL9), +-4 g (CTRL8 01, p71), 60 Hz (CTRL1 0101,
     // p65), ST_XL positive (CTRL10 bits 1:0 = 01, p74).
-    let low = t.sequence(Channel::LowG);
+    let low = t.sequence(Channel::LowG).unwrap();
     assert_eq!(
         low.steps(),
         &[
@@ -117,7 +117,7 @@ fn sequences_low_g_gyro_high_g_as_step_lists() {
     );
     // Gyroscope: LPF1 off and routing off (CTRL7), +-250 dps (CTRL6 FS_G 001 and bit 3, p69),
     // 240 Hz (CTRL2 0111, p66), ST_G positive (CTRL10 bits 3:2 = 01).
-    let gyro = t.sequence(Channel::Gyro);
+    let gyro = t.sequence(Channel::Gyro).unwrap();
     assert_eq!(
         gyro.steps(),
         &[
@@ -137,7 +137,7 @@ fn sequences_low_g_gyro_high_g_as_step_lists() {
     );
     // High-g: REGOUT_EN, 480 Hz (ODR_XL_HG 011), +-32 g (FS 000), no offset (CTRL1_XL_HG 0x98,
     // p91); XL_HG_ST positive (CTRL2_XL_HG bits 1:0 = 01).
-    let high = t.sequence(Channel::HighG);
+    let high = t.sequence(Channel::HighG).unwrap();
     assert_eq!(
         high.steps(),
         &[
@@ -153,7 +153,14 @@ fn sequences_low_g_gyro_high_g_as_step_lists() {
             bus(0x4D, 0x00),
         ]
     );
-    assert!(low.steps().len() <= MAX_STEPS && gyro.steps().len() <= MAX_STEPS);
+    assert_eq!(
+        (low.steps().len(), gyro.steps().len(), high.steps().len()),
+        (12, 12, 10)
+    );
+    assert_eq!(MAX_STEPS, 12);
+    assert_eq!(low.steps().last(), Some(&modify_ctrl10(0x00)));
+    assert_eq!(gyro.steps().last(), Some(&modify_ctrl10(0x00)));
+    assert_eq!(high.steps().last(), Some(&bus(0x4D, 0x00)));
 }
 
 #[test]
@@ -161,18 +168,18 @@ fn sequence_negative_stimulus_and_settle_time() {
     let t = SelfTestConfig::new()
         .with_stimulus(Stimulus::Negative)
         .with_settle_ms(7);
-    let low = t.sequence(Channel::LowG);
+    let low = t.sequence(Channel::LowG).unwrap();
     assert_eq!(low.steps().get(8), Some(&modify_ctrl10(0x02)));
     assert_eq!(
         low.steps().get(6),
         Some(&SelfTestStep::Bus(Step::DelayUs(7000)))
     );
     assert_eq!(
-        t.sequence(Channel::Gyro).steps().get(8),
+        t.sequence(Channel::Gyro).unwrap().steps().get(8),
         Some(&modify_ctrl10(0x08))
     );
     assert_eq!(
-        t.sequence(Channel::HighG).steps().get(6),
+        t.sequence(Channel::HighG).unwrap().steps().get(6),
         Some(&bus(0x4D, 0x02))
     );
 }
