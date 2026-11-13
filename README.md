@@ -1,6 +1,6 @@
 # lsm6dsk320x
 
-Driver for the STMicroelectronics LSM6DSK320X, a six-axis IMU (gyroscope and low-g accelerometer) with a separate high-g accelerometer, over four-wire SPI. It is `no_std`, written against the `embedded-hal` 1.0 and `embedded-hal-async` 1.0 traits (optionally `defmt`), and owns no HAL, pin, timer or executor. The crate root is the async driver; `lsm6dsk320x::blocking` has the same methods for blocking buses. It was written for the MARV V2 Rev 1 flight controller (RP2354B). Version 0.1.0: the API may still change (`Cargo.toml` has `publish = false`).
+Driver for the STMicroelectronics LSM6DSK320X, a six-axis IMU (gyroscope and low-g accelerometer) with a separate high-g accelerometer, over four-wire SPI. It is `no_std`, written against the `embedded-hal` 1.0 and `embedded-hal-async` 1.0 traits (optionally `defmt`), and owns no HAL, pin, timer or executor. The crate root is the async driver; `lsm6dsk320x::blocking` has the same methods for blocking buses. It was written for the MARV V2 Rev 1 flight controller (RP2354B). Version 0.1.0, prepared for crates.io: the API may still change.
 
 ## Works with
 

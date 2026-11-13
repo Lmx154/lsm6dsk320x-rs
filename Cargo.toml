@@ -2,7 +2,6 @@
 name = "lsm6dsk320x"
 version = "0.1.0"
 edition = "2024"
-publish = false
 license = "MIT"
 description = "Driver for the ST LSM6DSK320X IMU with high-g accelerometer over SPI. Async and blocking, on embedded-hal traits only."
 repository = "https://github.com/Lmx154/lsm6dsk320x-rs"
@@ -10,6 +9,7 @@ readme = "README.md"
 keywords = ["embedded", "no-std", "driver", "imu", "lsm6dsk320x"]
 categories = ["embedded", "no-std", "hardware-support"]
 rust-version = "1.99"
+exclude = ["hil/", "tools/", "docs/", "proptest-regressions/", ".gitignore"]
 
 [features]
 defmt = ["dep:defmt"]
