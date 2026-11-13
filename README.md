@@ -2,6 +2,10 @@
 
 Driver for the STMicroelectronics LSM6DSK320X, a six-axis IMU (gyroscope and low-g accelerometer) with a separate high-g accelerometer, over four-wire SPI. It is `no_std`, written against the `embedded-hal` 1.0 and `embedded-hal-async` 1.0 traits (optionally `defmt`), and owns no HAL, pin, timer or executor. The crate root is the async driver; `lsm6dsk320x::blocking` has the same methods for blocking buses. It was written for the MARV V2 Rev 1 flight controller (RP2354B). Version 0.1.0: the API may still change (`Cargo.toml` has `publish = false`).
 
+## Works with
+
+The driver works with any HAL and any MCU whose SPI device and delay implement `embedded-hal-async` 1.0 (async driver) or `embedded-hal` 1.0 (`blocking` module). No embassy crate is needed.
+
 ## Quick start
 
 The settings structs are `#[non_exhaustive]`: build them with `Config::new().with_...`, a struct literal does not compile outside the crate. The scaffolding hidden below (a dummy SPI device and delay) is only there so that this example is compiled by `cargo test --doc`.
