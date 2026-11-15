@@ -561,17 +561,6 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
         Ok(())
     }
 
-    /// Brings the bus back in step after a cancelled or failed transfer, then checks the chip.
-    ///
-    /// 1. One transaction holding a single one-byte `Write`: the read address of WHO_AM_I
-    ///    (0x8F). It empties the HAL's receive FIFO and re-frames the bus; it writes no device
-    ///    register.
-    /// 2. The identity check: one read of WHO_AM_I, [`Error::WrongId`] when it is not 0x75.
-    /// 3. [`verify`](Self::verify) when configured; [`Error::NotConfigured`] otherwise.
-    ///
-    /// Transactions: 34 when configured and every register matches, 2 when not configured. The
-    /// state and [`config`](Self::config) are never changed. Cancelling between transactions is
-    /// safe; call it again.
     /// The number of [`verify_step`](Self::verify_step) indices: one per register
     /// [`verify`](Self::verify) reads (32); 0 when not configured.
     pub fn verify_steps(&self) -> usize {
@@ -613,6 +602,17 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
         Ok(())
     }
 
+    /// Brings the bus back in step after a cancelled or failed transfer, then checks the chip.
+    ///
+    /// 1. One transaction holding a single one-byte `Write`: the read address of WHO_AM_I
+    ///    (0x8F). It empties the HAL's receive FIFO and re-frames the bus; it writes no device
+    ///    register.
+    /// 2. The identity check: one read of WHO_AM_I, [`Error::WrongId`] when it is not 0x75.
+    /// 3. [`verify`](Self::verify) when configured; [`Error::NotConfigured`] otherwise.
+    ///
+    /// Transactions: 34 when configured and every register matches, 2 when not configured. The
+    /// state and [`config`](Self::config) are never changed. Cancelling between transactions is
+    /// safe; call it again.
     pub async fn recover(&mut self) -> Result<(), Error<SPI::Error>> {
         let sent = self.spi.write(&[reg::WHO_AM_I | reg::SPI_READ]).await;
         self.bus(sent)?;
