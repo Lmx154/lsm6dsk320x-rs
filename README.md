@@ -103,7 +103,7 @@ Blocking: `lsm6dsk320x::blocking::Lsm6dsk320x::new(spi)` takes an `embedded_hal:
 - `info` (`Info`): WHO_AM_I, the clock trim `freq_fine`, and the output rates of the three sensors in millihertz plus the expected FIFO words per second. In normal mode these are the real rates with the trim; in the high-accuracy ODR mode they are the datasheet's table rate without trim (Table 22, p34).
 - User offsets: `set_offsets` with `calc::Offsets` (low-g weight `OffsetWeight`, high-g), `offsets`. `init` clears them; `configure` writes the stored values back. They change the output only when enabled in the configuration: `Config::accel_offset` (`Some(OffsetWeight)`) for the low-g accelerometer and `HighGConfig::user_offset` for the high-g one.
 - Self-test of the low-g accelerometer, the gyroscope and the high-g accelerometer: `self_test` with `SelfTestConfig`, returning a `SelfTestReport` per channel and axis against the datasheet windows (`calc::SELF_TEST_*`). The call takes about one second with the defaults, the applied configuration and offsets are re-applied when it completes, and while it runs the outputs and the interrupt pins are not meaningful. ST publishes no sequence for this part; the module documentation says which parts follow the datasheet and which follow a sibling part's example.
-- `verify` and `recover` (see the rules above).
+- `verify` and `recover` (see the rules above). `verify_steps` and `verify_step(index)` split a `verify` into one step per owned register (one read; a register that differs is read once more), with the same comparison: all steps in order send what `verify` sends and end the same way, so an application can spread the check over time.
 - Raw register access: `read_register`, `read_registers`, `write_register`, and the register map in `reg`. These neither check nor change the driver state.
 - The blocking front-end `blocking::Lsm6dsk320x`, one implementation shared with the async driver (the SPI and delay futures never pend).
 
@@ -144,7 +144,7 @@ RP2354B at 150 MHz, embassy-rp 0.10, 2026-11-11. These are observations on one u
 
 ## Tests
 
-Host tests (no hardware, a simulated bus): `cargo test --locked`. Observed: 169 unit tests pass, plus 1 README doctest (compiled, not run).
+Host tests (no hardware, a simulated bus): `cargo test --locked`. Observed: 170 unit tests pass, plus 1 README doctest (compiled, not run).
 
 On the board, through a debug probe on the SWD header (the script builds, flashes, runs and takes a lock so runs never overlap): `tools/run.sh <name>`, for example `tools/run.sh lsm6dsk320x_smoke`. The exit status is 0 when every check passed; logs are kept under `hil/logs/`. The programs use SPI1 (SCK GPIO10, MOSI GPIO11, MISO GPIO8, hardware CSn GPIO9 with pull-up R51), INT1 on GPIO7 and INT2 on GPIO6; the smoke program runs at 8 MHz.
 

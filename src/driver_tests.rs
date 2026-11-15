@@ -1452,3 +1452,55 @@ fn set_offsets_and_offsets_through_blocking_match_the_async_driver() {
     assert_eq!(b.set_offsets(&offsets_a()), Err(Error::Bus(BusFault)));
     assert_eq!(b.offsets(), Some(Offsets::new()));
 }
+
+#[test]
+fn verify_steps_in_order_send_what_verify_sends_and_each_finds_its_own_mismatch() {
+    let (shared, mut imu, _d) = rig();
+    assert_eq!(imu.verify_steps(), 0);
+    shared.arm(None, None);
+    assert_eq!(run(imu.verify_step(0)), Err(Error::NotConfigured));
+    assert_eq!(shared.transactions(), 0);
+    let c = Config::new();
+    let owned = c.owned_registers(&crate::calc::Offsets::new());
+    for by_init in [true, false] {
+        let (shared, mut imu, _d) = applied(&c, by_init);
+        assert_eq!(imu.verify_steps(), OWNED_COUNT);
+        shared.arm(None, None);
+        assert_eq!(run(imu.verify()), Ok(()));
+        let whole = shared.log();
+        shared.arm(None, None);
+        for i in 0..imu.verify_steps() {
+            assert_eq!(run(imu.verify_step(i)), Ok(()));
+        }
+        assert_eq!(shared.log(), whole);
+        shared.arm(None, None);
+        assert_eq!(run(imu.verify_step(OWNED_COUNT)), Ok(()));
+        assert_eq!(shared.transactions(), 0);
+        for o in &owned {
+            let m = o.mask & o.mask.wrapping_neg();
+            let before = shared.chip().regs[o.reg as usize];
+            shared.chip().regs[o.reg as usize] = before ^ m;
+            let hit = |x: &crate::image::Owned| x.reg == o.reg && x.mask & m != 0;
+            let want = |x: &crate::image::Owned| {
+                Err(Error::ConfigMismatch(Mismatch {
+                    register: x.reg,
+                    mask: x.mask,
+                    expected: x.expected,
+                    found: before ^ m,
+                }))
+            };
+            let first = owned.iter().position(hit).unwrap();
+            assert_eq!(run(imu.verify()), want(&owned[first]));
+            for (j, x) in owned.iter().enumerate() {
+                let got = run(imu.verify_step(j));
+                if hit(x) {
+                    assert_eq!(got, want(x), "register {:#04x}", x.reg);
+                } else {
+                    assert_eq!(got, Ok(()), "register {:#04x} at step {j}", o.reg);
+                }
+            }
+            assert_eq!(imu.config(), Some(&c));
+            shared.chip().regs[o.reg as usize] = before;
+        }
+    }
+}

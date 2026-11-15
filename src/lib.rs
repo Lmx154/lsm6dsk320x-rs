@@ -572,6 +572,47 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
     /// Transactions: 34 when configured and every register matches, 2 when not configured. The
     /// state and [`config`](Self::config) are never changed. Cancelling between transactions is
     /// safe; call it again.
+    /// The number of [`verify_step`](Self::verify_step) indices: one per register
+    /// [`verify`](Self::verify) reads (32); 0 when not configured.
+    pub fn verify_steps(&self) -> usize {
+        if self.applied.is_some() {
+            OWNED_COUNT
+        } else {
+            0
+        }
+    }
+
+    /// Checks the `index`-th register that [`verify`](Self::verify) reads, with the same comparison:
+    /// a register that differs is read once more, and only if it differs again the method returns
+    /// [`Error::ConfigMismatch`]. Every index from 0 to [`verify_steps`](Self::verify_steps) - 1, in
+    /// order, sends what one `verify` sends and ends the same way, so an application can spread a
+    /// `verify` over time. One transaction; two when the register differs. An index at or past
+    /// `verify_steps()` sends nothing and returns `Ok`. [`Error::NotConfigured`] when not configured.
+    pub async fn verify_step(&mut self, index: usize) -> Result<(), Error<SPI::Error>> {
+        let config = match self.applied.as_ref() {
+            Some(a) => a.config,
+            None => return Err(Error::NotConfigured),
+        };
+        let owned: [Owned; OWNED_COUNT] = config.owned_registers(&self.offsets);
+        let Some(o) = owned.get(index) else {
+            return Ok(());
+        };
+        let found = self.read_register(o.reg).await?;
+        if (found ^ o.expected) & o.mask == 0 {
+            return Ok(());
+        }
+        let found = self.read_register(o.reg).await?;
+        if (found ^ o.expected) & o.mask != 0 {
+            return Err(Error::ConfigMismatch(Mismatch {
+                register: o.reg,
+                mask: o.mask,
+                expected: o.expected,
+                found,
+            }));
+        }
+        Ok(())
+    }
+
     pub async fn recover(&mut self) -> Result<(), Error<SPI::Error>> {
         let sent = self.spi.write(&[reg::WHO_AM_I | reg::SPI_READ]).await;
         self.bus(sent)?;

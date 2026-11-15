@@ -154,6 +154,16 @@ impl<SPI: SpiDevice> Lsm6dsk320x<SPI> {
         block_on(self.inner.verify())
     }
 
+    /// See [`crate::Lsm6dsk320x::verify_steps`].
+    pub fn verify_steps(&self) -> usize {
+        self.inner.verify_steps()
+    }
+
+    /// See [`crate::Lsm6dsk320x::verify_step`].
+    pub fn verify_step(&mut self, index: usize) -> Result<(), Error<SPI::Error>> {
+        block_on(self.inner.verify_step(index))
+    }
+
     /// See [`crate::Lsm6dsk320x::recover`].
     pub fn recover(&mut self) -> Result<(), Error<SPI::Error>> {
         block_on(self.inner.recover())
